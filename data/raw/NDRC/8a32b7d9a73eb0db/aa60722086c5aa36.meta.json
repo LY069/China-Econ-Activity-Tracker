@@ -1,0 +1,11 @@
+{
+ "url": "https://www.ndrc.gov.cn/xwdt/xwfb/202209/t20220929_1337676.html",
+ "request_url": "https://www.ndrc.gov.cn/xwdt/xwfb/202209/t20220929_1337676.html",
+ "params": null,
+ "data": null,
+ "method": "GET",
+ "status": 200,
+ "first_retrieved_at": "2026-10-19T01:52:03Z",
+ "bytes": 6329,
+ "content_type": "text/html"
+}

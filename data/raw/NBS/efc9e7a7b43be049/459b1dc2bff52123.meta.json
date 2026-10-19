@@ -1,0 +1,11 @@
+{
+ "url": "https://www.stats.gov.cn/sj/zxfb/202507/t20250715_1960403.html",
+ "request_url": "https://www.stats.gov.cn/sj/zxfb/202507/t20250715_1960403.html",
+ "params": null,
+ "data": null,
+ "method": "GET",
+ "status": 200,
+ "first_retrieved_at": "2026-10-19T01:48:30Z",
+ "bytes": 1384290,
+ "content_type": "text/html"
+}
