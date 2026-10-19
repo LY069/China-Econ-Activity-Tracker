@@ -7,6 +7,9 @@ on:
     # 02:20 and 10:20 UTC daily (10:20/18:20 Beijing): after NBS (10:00 BJT) and PBoC/MOF releases
     - cron: "20 2,10 * * *"
   workflow_dispatch: {}
+  push:
+    branches: [main, "claude/**"]
+    paths: ["cetracker/**", "config/**", ".github/workflows/refresh.yml", "requirements.txt"]
 
 permissions:
   contents: write
@@ -30,6 +33,10 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Unit and integration tests
         run: python -m pytest -q
+      - name: Source reachability from the runner
+        run: |
+          for u in https://data.stats.gov.cn/ https://www.stats.gov.cn/ https://www.pbc.gov.cn/ https://www.mof.gov.cn/ https://yss.mof.gov.cn/ https://www.ndrc.gov.cn/ https://www.chinabond.com.cn/ https://www.celma.org.cn/; do
+            echo "$(curl -s -o /dev/null -w '%{http_code}' -m 20 -A 'Mozilla/5.0' "$u") $u"; done
       - name: Build (fetch, derive, analyse, validate, export)
         run: python -m cetracker.build
       - name: Fail on FAIL-status validation checks
@@ -47,15 +54,16 @@ jobs:
           git config user.name "tracker-bot"
           git config user.email "tracker-bot@users.noreply.github.com"
           git add data/ site/ docs/validation_report.md
-          git diff --cached --quiet || git commit -m "Data refresh $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push
+          # [skip ci] stops the data commit from re-triggering this workflow
+          git diff --cached --quiet || git commit -m "Data refresh $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
+          git push origin HEAD:${GITHUB_REF_NAME}
       - uses: actions/upload-pages-artifact@v3
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         with:
           path: site
   deploy:
     needs: refresh
-    if: always()
+    if: always() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
