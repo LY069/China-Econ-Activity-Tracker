@@ -73,7 +73,15 @@ tenor, MOF local-bond issuance by type, NDRC approval counts, NBS tier housing c
 infrastructure FAI growth. The parsers in `fetch/releases.py` split a text into period blocks
 (single month / year-to-date / month-end stock) and extract only explicitly stated figures;
 nothing is inferred. Where a release gives only year-to-date figures, single months are YTD
-differences, flagged `from_ytd_diff`.
+differences, flagged `from_ytd_diff`. Such a difference spans two releases, so it mixes two vintages
+and two roundings. Period phrases handled: single months, "1-8月", "前8个月"/"前两个月", quarter
+phrases ("一季度", "上半年", "前三季度"), and the bare year in December annual reports
+("2025年社会融资规模增量累计为…", read as January–December).
+
+**Replay.** `python -m cetracker.build --replay` re-parses the whole store from `data/raw` with no
+network: each request is served from the most recently first-retrieved archived response for its
+request hash. Every number in the store can therefore be regenerated from archived bytes, and a
+parser fix can be tested against all history before it is pushed.
 
 ## 2. China-specific data treatment
 
@@ -172,6 +180,11 @@ first fetch.
   Household loans split into short and medium/long. Corporate loans split into short, medium/long,
   bills, leases and advances. Stock identities hold to 0.01 亿元. Flows from stock changes can differ
   from PBoC-reported new loans (write-offs, reclassification); the gap is a reconciliation check.
+  At a change of statistical scope the stock difference is not a flow. In January 2023
+  (`PBOC_SCOPE_2023`), the 2023 table's stocks include consumer-finance and other newly covered
+  institutions, which the 2022 table's do not. The household stock difference is RMB 1,091bn against
+  257bn of published new loans. The Jan-2023 flow is therefore the release-text figure, flagged
+  `break:PBOC_SCOPE_2023,from_release_text`.
 - **TSF:** from the PBoC flow table. Its published components do not sum to the total: the residual
   is PBoC's unpublished "other" category, logged as WARN. Tables for years before the 2018–19
   redefinitions have no government-bond / ABS / write-off columns. There TSF ex-government equals
@@ -188,7 +201,7 @@ first fetch.
 - **Tiers:** NBS 70-city tiers (4 + 31 + 35, `config/tiers.yaml`).
 - **Aggregation:** the tier m/m (y/y) is the simple mean over the tier's cities of
   (index − 100), and is reported only when every city in the tier reports.
-- **Level:** a chained index, 2015 = 100.
+- **Level:** a chained index, 2022 average = 100. Months without an m/m are gaps.
 - **Breadth:** the number of cities with m/m declines.
 - **Validation:** tier figures are checked against those quoted in the NBS release text,
   with a tolerance of 0.1pp, the rounding of the published figures.
@@ -267,14 +280,21 @@ prewhitening an MA-smoothed series is imperfect. Smoothed series are display-onl
   - TSF components vs total (residual = PBoC's unpublished "other", WARN).
   - Published single-month retail sales vs the change in published YTD.
 - **Cross-source reconciliation:**
-  - PBoC table vs PBoC release text (loans, TSF).
+  - PBoC table vs PBoC release text (loans, TSF). The text is PBoC's first release; the table is
+    the current vintage, in which PBoC re-allocates flows across the months of a year. Monthly
+    differences are therefore revisions, and are logged as WARN.
+  - TSF annual total: the sum of the table's 12 monthly flows must equal the full-year figure in
+    the December release, within half its printed precision (RMB 10bn, or 50bn when printed to
+    0.1 trillion). This is a FAIL-level check.
   - TSF government bonds − MOF local net vs NPC central quotas.
   - TSF stock y/y.
 - **Published y/y reproduction:**
   - Retail comparable single-month y/y, within a rounding bound propagated from the 0.1pp
     rounding of YTD growth.
   - M1/M2 from levels; M1 2025 uses PBoC's restated 2024 base.
-  - Tier aggregates vs NBS interpretation text.
+  - Tier aggregates vs NBS interpretation text. The parser reads one-tier statements and the
+    combined forms "二、三线…分别…X%和Y%", "一、二、三线…X%、Y%和Z%" and "由上月…转为…". Each
+    number takes the most recent 上涨/下降 before it.
   - Naive-vs-published gap logs.
 - **Coverage:** missing months per key series (January excluded for Jan–Feb releases).
 - **Plausibility:** magnitude bounds on key series and rolling-median checks that catch a block

@@ -6,6 +6,7 @@ filled in for a failed source; the corresponding charts show "no data" with the 
 """
 from __future__ import annotations
 
+import os
 import re
 import traceback
 from collections import defaultdict
@@ -222,7 +223,7 @@ def ingest_pboc(pages: int = 120) -> pd.DataFrame:
     rows = []
     try:
         lst = crawl("PBoC", "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
-                    r"(\d{4})年(\d{1,2}月|一季度|上半年|前三季度|全年)(金融统计数据报告|社会融资规模增量统计数据报告)",
+                    r"(\d{4})年(\d{1,2}月|一季度|上半年|前三季度|全年)?(金融统计数据报告|社会融资规模增量统计数据报告)",
                     pages=pages, page_fmt="11040-{n}.html", page_offset=1)
         if not lst:
             raise LookupError("no PBoC releases found on list pages")
@@ -261,6 +262,10 @@ def ingest_pboc(pages: int = 120) -> pd.DataFrame:
         rows += _rows_from_fields(_blocks_to_monthly(tsf_recs, tf),
                                   {f: ("tsf_text.flow" if f == "tsf_flow" else f"tsf_text.{f}") for f in tf}, "PBoC", "primary")
         for y, mth, _, b, raw, ts, url, pub in tsf_recs:
+            # first-release YTD as printed: the like-for-like basis for reconciling with the table
+            if b.get("scope") == "ytd" and b.get("n") == mth and "tsf_flow" in b and y:
+                prov = store.Provenance("PBoC", "primary", url, raw, ts, pub or ts[:10], lineage="release_text:tsf_flow_ytd")
+                rows.append(store.make_rows("tsf_text.flow_ytd", pd.Series([b["tsf_flow"] / 10], index=[_month_end(y, mth)]), prov))
             if b.get("scope") == "stock" and "tsf_stock" in b and y:
                 per = _month_end(y, mth)
                 prov = store.Provenance("PBoC", "primary", url, raw, ts, pub or ts[:10], lineage="release_text:tsf_stock")
@@ -620,6 +625,9 @@ PROBES = {
 def run_all() -> pd.DataFrame:
     STATUS.clear()
     for name, url in PROBES.items():
+        if os.environ.get("CETRACKER_REPLAY") == "1":
+            STATUS.setdefault("_reachability", {})[name] = {"url": url, "ok": None, "detail": "replay from raw archive (not probed)"}
+            continue
         ok, msg = reachable(url)
         STATUS.setdefault("_reachability", {})[name] = {"url": url, "ok": ok, "detail": msg}
     frames = []

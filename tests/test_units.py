@@ -174,6 +174,15 @@ def test_tier_interpretation_phrasing():
     p = R.nbs_tiers_interpretation(t)
     assert p["tier1_new_mom"] == 0.1 and p["tier2_new_mom"] == 0.0
     assert p["tier2_new_yoy"] == -2.4 and p["tier3_new_yoy"] == -3.9
+    # May 2023 release wording: the combined statement with a 由…转为 transition
+    t = ("二、三线城市二手住宅销售价格环比由上月持平分别转为下降0.3%和0.2%。"
+         "二、三线城市新建商品住宅销售价格环比由上月上涨0.1%和0.2%转为持平。")
+    p = R.nbs_tiers_interpretation(t)
+    assert p["tier2_used_mom"] == -0.3 and p["tier3_used_mom"] == -0.2
+    assert p["tier2_new_mom"] == 0.0 and p["tier3_new_mom"] == 0.0
+    t = "7月份，一、二、三线城市二手住宅销售价格同比分别下降1.4%、2.7%和3.5%，降幅比上月分别扩大1.0、0.3和0.1个百分点。"
+    p = R.nbs_tiers_interpretation(t)
+    assert (p["tier1_used_yoy"], p["tier2_used_yoy"], p["tier3_used_yoy"]) == (-1.4, -2.7, -3.5)
 
 
 
@@ -198,3 +207,23 @@ def test_lead_lag_no_janfeb_artefact():
     s = s[s.index.month != 1]
     d, how = lags.make_stationary(s)
     assert how == "diff1" and d.dropna().eq(1.0).all() and d[d.index.month.isin([1, 2])].isna().all()
+
+
+def test_period_phrases_quarters_and_annual():
+    assert R.period_scope("前三季度") == ("ytd", 9) and R.period_scope("一季度") == ("ytd", 3)
+    t = ("初步统计,2025年社会融资规模增量累计为35.6万亿元,比上年多3.34万亿元。"
+         "12月末社会融资规模存量为442.12万亿元,同比增长8.3%。")
+    b = {x["scope"]: x for x in R.pboc_tsf(t)["blocks"]}
+    assert b["ytd"]["n"] == 12 and b["ytd"]["tsf_flow"] == 356000.0
+    assert b["stock"]["n"] == 12 and b["stock"]["tsf_stock_yoy"] == 8.3
+    b = R.pboc_tsf("2025年前三季度社会融资规模增量累计为30.09万亿元")["blocks"][0]
+    assert (b["scope"], b["n"], b["tsf_flow"]) == ("ytd", 9, 300900.0)
+
+
+def test_quarter_retail_and_ppi_forms():
+    r = R.nbs_retail("一季度,社会消费品零售总额108659亿元,同比增长3.3%(以下除特殊说明外均为名义增长)。"
+                     "3月份,社会消费品零售总额34233亿元,同比下降3.5%。")
+    assert r["retail.ytd"] == 10865.9 and r["retail.ytd_yoy"] == 3.3 and r["retail.yoy"] == -3.5
+    assert R.nbs_ppi("2026年3月份,全国工业生产者出厂价格同比由上月下降0.9%转为上涨0.5%;环比上涨1.0%")["prices.ppi_yoy"] == 0.5
+    assert R.nbs_ppi("2025年7月份,全国工业生产者出厂价格环比下降0.2%,工业生产者购进价格环比下降0.3%。"
+                     "工业生产者出厂价格同比下降3.6%,工业生产者购进价格同比下降4.5%")["prices.ppi_yoy"] == -3.6

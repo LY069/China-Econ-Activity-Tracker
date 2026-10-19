@@ -141,6 +141,7 @@ for k in ("total", "hh_total", "hh_short", "hh_medlong", "corp_total", "corp_sho
     reg(f"loans_text.{k}", f"New RMB loans as reported in PBoC release text: {k}", "RMB bn", "M", "Credit", "flow")
 reg("loans.corp_leases", "Corporate financial leases (flow)", "RMB bn", "M", "Credit", "flow")
 reg("loans.corp_advances", "Corporate advances (flow)", "RMB bn", "M", "Credit", "flow")
+reg("tsf_text.flow_ytd", "TSF flow, year-to-date, as first reported in PBoC release text", "RMB bn", "M", "Credit", "flow")
 for k in ("flow", "rmb_loans", "govt_bonds", "stock", "stock_yoy"):
     reg(f"tsf_text.{k}", f"TSF {k} as reported in PBoC release text", "RMB bn" if k != "stock_yoy" else "%", "M", "Credit", "flow")
 

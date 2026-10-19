@@ -36,6 +36,7 @@ pip install -r requirements.txt
 python -m pytest -q                 # unit + integration tests
 python -m cetracker.build           # fetch, derive, analyse, validate, export
 python -m cetracker.build --offline # recompute from the existing store
+python -m cetracker.build --replay  # re-parse everything from the raw archive, no network
 cd site && python -m http.server    # open http://localhost:8000
 ```
 

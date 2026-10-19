@@ -56,6 +56,12 @@
   what: "Above-designated-size sample (IP: revenue >= RMB20m since 2011) re-drawn each January."
   treatment: Never compute y/y from published levels across years; reconstruct implied comparable base.
   status: n/a
+- id: PBOC_SCOPE_2023
+  date: "2023-01-31"
+  series: [loans_stock.*, loans.*, money.*]
+  what: "PBoC brings consumer-finance companies, wealth-management companies and financial asset investment companies into the financial statistics from January 2023; the 2023 credit table's stocks are on the new scope, the 2022 table's are not (household loan stock jumps ~RMB 0.8trn)."
+  treatment: "Stock-difference flows for Jan 2023 are replaced by the PBoC release-text flow for the same month (flag break:PBOC_SCOPE_2023,from_release_text); left as a gap where the text has no figure."
+  status: verified (Dec-22 vs Jan-23 household stock difference 1,091bn vs published new household loans 257bn)
 - id: GDP_CENSUS_2023
   date: 2023-12-31
   series: [gdp.*]

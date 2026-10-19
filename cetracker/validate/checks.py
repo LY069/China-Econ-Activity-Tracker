@@ -30,6 +30,31 @@ def _exc_list(df: pd.DataFrame, cols: list[str]) -> list[dict]:
             for i in d.index]
 
 
+def tsf_annual(get):
+    cid, group = "recon:tsf_annual", "Cross-source reconciliation"
+    desc = "TSF annual total: sum of 12 monthly flows in the PBoC table vs full-year figure in the December release text"
+    t, ytd = get("tsf.flow"), get("tsf_text.flow_ytd")
+    if t.empty or ytd.empty:
+        return _missing(cid, group, desc, [x for x, s in (("tsf.flow", t), ("tsf_text.flow_ytd", ytd)) if s.empty])
+    dec = ytd[ytd.index.month == 12]
+    rows = {}
+    for d, v in dec.items():
+        yr = t[t.index.year == d.year]
+        if len(yr) == 12:
+            rows[d] = (yr.sum(), v)
+    if not rows:
+        return _missing(cid, group, desc, ["no complete year in both"])
+    df = pd.DataFrame(rows, index=["computed", "published"]).T
+    df["diff"] = df["computed"] - df["published"]
+    # tolerance = half the last printed digit: 0.01 tn (RMB 10bn) normally, 0.1 tn when the annual
+    # report rounds to one decimal (a value that is a multiple of RMB 100bn is treated as such)
+    df["tol"] = [50.0 if round(v) % 100 == 0 else 10.0 for v in df["published"]]
+    df["exception"] = df["diff"].abs() > df["tol"]
+    n = int(df["exception"].sum())
+    return _rec(cid, group, desc, "PASS" if n == 0 else "FAIL", len(df), n, "half the printed precision (10 or 50 bn)",
+                f"max |diff| {df['diff'].abs().max():.1f} bn over {len(df)} year(s)", _exc_list(df, ["computed", "published", "diff"]))
+
+
 def identity(get, cid, desc, total, parts, tol_abs, tol_rel=0.0, group="Accounting identity", warn_only=False):
     need = [total, *parts]
     if any(get(s).empty for s in need):
@@ -304,9 +329,13 @@ def run(get) -> list[dict]:
     R.append(pair_check(get, "recon:loans_corp_table_vs_text", "Cross-source reconciliation",
                         "New corporate loans: PBoC credit-table stock change vs PBoC release text",
                         "loans.corp_total", "loans_text.corp_total", tol_abs=50, warn_only=True))
+    # The text is PBoC's first release; the table is the current vintage, in which PBoC re-allocates
+    # flows across months of a year. Monthly differences are revisions (logged); the annual total
+    # must agree (December YTD in the text is rounded to RMB 10bn).
     R.append(pair_check(get, "recon:tsf_table_vs_text", "Cross-source reconciliation",
-                        "TSF monthly flow: PBoC statistics table vs PBoC release text (text rounded to RMB 10bn)",
-                        "tsf.flow", "tsf_text.flow", tol_abs=10))
+                        "TSF monthly flow: current-vintage PBoC table vs first-release text (differences = revisions, logged)",
+                        "tsf.flow", "tsf_text.flow", tol_abs=10, warn_only=True))
+    R.append(tsf_annual(get))
     R.append(pair_check(get, "recon:m2_yoy", "Published y/y reproduction",
                         "M2 y/y computed from PBoC money-supply levels vs published", "money.m2~yoy_calc", "money.m2_yoy",
                         tol_abs=0.15, warn_only=True))

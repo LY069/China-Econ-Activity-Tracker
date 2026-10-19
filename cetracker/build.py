@@ -2,6 +2,7 @@
 
     python -m cetracker.build              # full refresh (network)
     python -m cetracker.build --offline    # recompute from the existing store only
+    python -m cetracker.build --replay     # re-parse everything from data/raw, no network
 
 Outputs (site/data/):
     catalog.json        every series: meta, values, provenance, flags, SA notes
@@ -16,6 +17,7 @@ and data/nowcast_log.csv (append-only pre-release nowcast log, scored on later b
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import math
 from datetime import datetime, timezone
@@ -301,5 +303,8 @@ def main(offline: bool = False):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--offline", action="store_true")
+    ap.add_argument("--replay", action="store_true")
     a = ap.parse_args()
+    if a.replay:
+        os.environ["CETRACKER_REPLAY"] = "1"
     main(offline=a.offline)

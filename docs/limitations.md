@@ -33,6 +33,11 @@ Stated plainly so they are not mistaken for findings.
   The project-type ("six networks") classifier is built and unit-tested, but it has no
   project-level input until those sources (or special-bond prospectus project lists) are
   scraped. Its audit precision/recall cannot be reported until then.
+- **PBoC table data carries no publication history.** The statistics tables are re-published in
+  place, so their rows get the retrieval date as vintage (`vintage_from_retrieval`). First-release
+  monthly TSF and loan figures exist only in the release text (`tsf_text.*`, `loans_text.*`).
+  They differ from the current table by PBoC's within-year re-allocation, which is up to about
+  RMB 50bn a month, and RMB 134bn for April 2024. Annual totals agree.
 - **TSF components** do not sum to the total by design (PBoC's unpublished "other" category). The
   identity is reported as WARN with the residual.
 - **Physical proxies:** cement, steel and power come from NBS. Excavator sales (CCMA) and rebar

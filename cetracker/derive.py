@@ -22,6 +22,10 @@ from .transform import ytd as Y, seasonal as SA, credit as C, deflate as D, hous
 NOTES: dict[str, str] = {}
 
 
+
+# months where consecutive PBoC credit-table stocks are on different statistical scopes
+STOCK_SCOPE_BREAKS = {"2023-01-31": "PBOC_SCOPE_2023"}
+
 class Deriver:
     def __init__(self, obs: pd.DataFrame):
         self.obs = store.latest(obs)
@@ -172,7 +176,22 @@ class Deriver:
         for sid in [x for x in self.obs["series_id"].unique() if x.startswith("loans_stock.")]:
             st = self.get(sid)
             full = st.reindex(pd.date_range(st.index.min(), st.index.max(), freq="ME"))
-            self.put("loans." + sid.split(".", 1)[1], full.diff(), "flow_from_stock[diff]", [sid])
+            k = sid.split(".", 1)[1]
+            flow, flags, ins = full.diff(), {}, [sid]
+            # stock differences across a change of statistical scope are not flows: use the
+            # release-text flow for that month, or leave a gap (config/breaks.yaml)
+            for d, brk in STOCK_SCOPE_BREAKS.items():
+                d = pd.Timestamp(d)
+                if d not in flow.index:
+                    continue
+                txt = self.get(f"loans_text.{k}") if self.has(f"loans_text.{k}") else pd.Series(dtype=float)
+                if d in txt.index:
+                    flow[d] = txt[d]
+                    flags[d] = f"break:{brk},from_release_text"
+                    ins = [sid, f"loans_text.{k}"]
+                else:
+                    flow[d] = np.nan
+            self.put("loans." + k, flow, "flow_from_stock[diff]", ins, flags)
         for code in ("m2", "m1"):
             if self.has(f"money.{code}"):
                 lvl = self.get(f"money.{code}")

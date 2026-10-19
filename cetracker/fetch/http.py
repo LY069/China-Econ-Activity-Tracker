@@ -7,6 +7,10 @@ response re-uses the existing file untouched, so scheduled refreshes do not chan
 repository unless the source actually changed. Cache-busting params (k1, t, _) are left
 out of the request hash. Store rows reference the raw file, so any
 dashboard number can be traced to the exact response it was parsed from.
+
+Replay (CETRACKER_REPLAY=1, `python -m cetracker.build --replay`): no network; each request is
+served from the most recently first-retrieved archived response for its request hash, so the
+whole store can be rebuilt from data/raw alone (used to re-parse after a parser fix).
 """
 from __future__ import annotations
 
@@ -57,6 +61,8 @@ def fetch(source: str, url: str, params: dict | None = None, data: dict | None =
     key = json.dumps([url, stable, data, method], sort_keys=True, ensure_ascii=False)
     h = hashlib.sha1(key.encode()).hexdigest()[:16]
     d = RAW / source / h
+    if os.environ.get("CETRACKER_REPLAY") == "1":
+        return _replay(source, url, d)
     last = None
     for i in range(retries):
         try:
@@ -81,6 +87,18 @@ def fetch(source: str, url: str, params: dict | None = None, data: dict | None =
             last = repr(e)[:300]
         time.sleep(2 ** (i + 1))
     raise FetchError(f"{source}: {url} failed after {retries} tries: {last}")
+
+
+def _replay(source: str, url: str, d: Path) -> tuple[bytes, str, str]:
+    found = []
+    for m in (d.glob("*.meta.json") if d.exists() else []):
+        raw = sorted(d.glob(m.name.replace(".meta.json", ".*.gz")))
+        if raw:
+            found.append((json.loads(m.read_text())["first_retrieved_at"], raw[0]))
+    if not found:
+        raise FetchError(f"{source}: {url} not in raw archive (replay mode)")
+    ts, path = max(found)
+    return read_raw(path), str(path.relative_to(ROOT)), ts
 
 
 def reachable(url: str, timeout: int = 10) -> tuple[bool, str]:

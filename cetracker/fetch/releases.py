@@ -36,6 +36,10 @@ def period_scope(phrase: str) -> tuple[str, int | None]:
     """('ytd'|'month', month count or month number) from a period phrase."""
     if phrase.endswith("月份"):
         return "month", int(phrase[:-2])
+    if phrase in ("一季度", "上半年", "前三季度", "全年"):
+        return "ytd", {"一季度": 3, "上半年": 6, "前三季度": 9, "全年": 12}[phrase]
+    if re.fullmatch(r"\d{4}年", phrase):           # annual report: '2025年社会融资规模增量累计为…'
+        return "ytd", 12
     if phrase.startswith("前"):
         n = phrase[1:].rstrip("月").rstrip("个")
         return "ytd", int(n) if n.isdigit() else CN_MONTHS.get(n)
@@ -43,7 +47,8 @@ def period_scope(phrase: str) -> tuple[str, int | None]:
 
 
 PERIOD_ANY = re.compile(r"(\d{1,2}[-—–至]\d{1,2}月(?:份)?|前(?:\d{1,2}|[一二两三四五六七八九十]{1,2})个?月|"
-                        r"(?<![-—–至\d])\d{1,2}月(?:份|末)?|一季度|上半年|前三季度|全年|今年以来)")
+                        r"(?<![-—–至\d])\d{1,2}月(?:份|末)?|一季度|上半年|前三季度|全年|今年以来|"
+                        r"\d{4}年(?=社会融资规模增量|人民币贷款增加|人民币存款增加))")
 
 
 def chunks_by_period(t: str) -> list[tuple[str, int | None, str]]:
@@ -293,7 +298,8 @@ def nbs_retail(text: str) -> dict:
     '9月份，社会消费品零售总额42433亿元，同比增长1.1%[，环比增长0.06%]' (single month)."""
     t = _clean(text)
     out = {}
-    m = (_first(r"1[—\-–]\d{1,2}月份,社会消费品零售总额" + NUM + r"亿元,(?:同比|比上年)?(增长|下降)" + NUM + "%", t)
+    # quarter-end releases state YTD as '一季度,…' / '上半年,…' / '前三季度,…'
+    m = (_first(r"(?:1[—\-–]\d{1,2}月份|一季度|上半年|前三季度),社会消费品零售总额" + NUM + r"亿元,(?:同比|比上年)?(增长|下降)" + NUM + "%", t)
          or _first(r"(?:20\d\d年|全年),社会消费品零售总额" + NUM + r"亿元,(?:同比|比上年)?(增长|下降)" + NUM + "%", t))
     if m:
         out["retail.ytd"], out["retail.ytd_yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
@@ -317,7 +323,7 @@ def nbs_ip(text: str) -> dict:
     m = _first(r"规模以上工业增加值比上月(增长|下降)" + NUM + "%", t) or _first(r"规模以上工业增加值同比(?:实际)?(?:增长|下降)[\d.]+%,环比(增长|下降)" + NUM + "%", t)
     if m:
         out["ip.mom_sa_nbs"] = _sgn(m.group(1), m.group(2))
-    m = (_first(r"1[—\-–]\d{1,2}月份,(?:全国)?规模以上工业增加值(?:同比)?(?:实际)?(增长|下降)" + NUM + "%", t)
+    m = (_first(r"(?:1[—\-–]\d{1,2}月份|一季度|上半年|前三季度),(?:全国)?规模以上工业增加值(?:同比)?(?:实际)?(增长|下降)" + NUM + "%", t)
          or _first(r"(?:20\d\d年|全年),(?:全国)?规模以上工业增加值(?:比上年|同比)?(?:实际)?(增长|下降)" + NUM + "%", t))
     if m:
         out["ip.ytd_yoy"] = _sgn(m.group(1), m.group(2))
@@ -369,8 +375,13 @@ def nbs_cpi(text: str) -> dict:
 
 def nbs_ppi(text: str) -> dict:
     t = _clean(text)
+    # forms: '全国工业生产者出厂价格同比下降2.2%'; '…出厂价格和购进价格同比均下降…';
+    # '…出厂价格同比由上月下降0.9%转为上涨0.5%'; a lead sentence on m/m followed by
+    # '工业生产者出厂价格同比下降3.6%' (no 全国)
     m = (_first(r"全国工业生产者出厂价格同比(上涨|下降)" + NUM + "%", t)
-         or _first(r"全国工业生产者出厂价格和购进价格同比(?:均|分别)?(上涨|下降)" + NUM + "%", t))
+         or _first(r"全国工业生产者出厂价格和购进价格同比(?:均|分别)?(上涨|下降)" + NUM + "%", t)
+         or _first(r"全国工业生产者出厂价格同比由上月[^,;。]*?转为(上涨|下降)" + NUM + "%", t)
+         or _first(r"(?<![,、])工业生产者出厂价格同比(上涨|下降)" + NUM + "%", t))
     if m:
         return {"prices.ppi_yoy": _sgn(m.group(1), m.group(2))}
     if _first(r"全国工业生产者出厂价格同比持平", t):
@@ -418,18 +429,35 @@ def nbs_tiers_interpretation(text: str) -> dict:
     tiers = {"一线": "tier1", "二线": "tier2", "三线": "tier3"}
     for seg_cn, seg in segs.items():
         for h_cn, h in (("环比", "mom"), ("同比", "yoy")):
-            # combined statement for tiers 2 and 3
-            m = _first(r"二、三线城市" + seg_cn + r"销售价格" + h_cn + r"分别(上涨|下降)?" + NUM + r"%和(上涨|下降)?" + NUM + "%", t)
-            if m:
-                v1 = m.group(1) or ""
-                v2 = m.group(3) or v1
-                out[f"tier2_{seg}_{h}"] = _sgn(v1, m.group(2))
-                out[f"tier3_{seg}_{h}"] = _sgn(v2, m.group(4))
+            # combined statements: '二、三线…分别下降0.3%和0.2%', '一、二、三线…分别下降1.4%、2.7%和3.5%',
+            # '二、三线…由上月持平分别转为下降0.3%和0.2%', '…由上月上涨0.1%和0.2%转为持平', '…均下降1.0%'.
+            # The clause ends at the first comma (the next clause is the other horizon or the change in pace);
+            # each number takes the most recent 上涨/下降 before it.
+            for pre, tks in (("一、二、三线", ("tier1", "tier2", "tier3")), ("(?<!、)二、三线", ("tier2", "tier3"))):
+                m = _first(pre + r"城市" + seg_cn + r"销售价格" + h_cn + r"([^,;。]*)", t)
+                if not m:
+                    continue
+                tail = m.group(1).rsplit("转为", 1)[-1]
+                vals, verb = [], ""
+                for v, num in re.findall(r"(上涨|下降)?(\d+(?:\.\d+)?)%", tail):
+                    verb = v or verb
+                    vals.append(_sgn(verb, num))
+                if len(vals) == len(tks):
+                    pass
+                elif len(vals) == 1 and "均" in tail:
+                    vals = vals * len(tks)
+                elif not vals and re.match(r"(均)?持平", tail):
+                    vals = [0.0] * len(tks)
+                else:
+                    continue
+                for tk, v in zip(tks, vals):
+                    out.setdefault(f"{tk}_{seg}_{h}", v)
             for tcn, tk in tiers.items():
                 key = f"{tk}_{seg}_{h}"
                 if key in out:
                     continue
-                m = _first(tcn + r"城市" + seg_cn + r"销售价格" + h_cn + r"([^,;。]*)", t)
+                # '三线城市' must not match inside the combined '二、三线城市' statement
+                m = _first(r"(?<!、)" + tcn + r"城市" + seg_cn + r"销售价格" + h_cn + r"([^,;。]*)", t)
                 if not m:
                     continue
                 phrase = m.group(1)
