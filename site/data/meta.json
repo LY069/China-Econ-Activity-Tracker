@@ -1,1 +1,1 @@
-{"built_at":"2026-10-19T02:01:32Z","n_series":354,"n_rows":19507,"n_raw_files":189,"derive_notes":{},"offline":false}
+{"built_at":"2026-10-19T02:39:11Z","n_series":507,"n_rows":30752,"n_raw_files":625,"derive_notes":{"fai.ytd~sm_split~sa":"X-13ARIMA-SEATS (X-11, automdl, CNY regressors)","fai.re_ytd~sm_split~sa":"X-13ARIMA-SEATS (X-11, automdl, CNY regressors)","re.starts_ytd~sm_split~sa":"X-13ARIMA-SEATS (X-11, automdl, CNY regressors)","re.completions_ytd~sm_split~sa":"X-13ARIMA-SEATS (X-11, automdl, CNY regressors)"},"offline":false}
