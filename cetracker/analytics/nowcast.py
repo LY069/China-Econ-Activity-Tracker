@@ -17,8 +17,9 @@ the first build so true real-time evaluation becomes possible over time, and eve
 nowcast is logged before release (nowcast_log.csv) and scored after.
 
 Evaluation: expanding window, first origin after `min_train` observations; one-step
-nowcast at each origin; RMSE vs AR(1) benchmark; Diebold-Mariano test with the
-Harvey-Leybourne-Newbold small-sample correction (squared-error loss, h = 1).
+nowcast at each origin; RMSE vs AR(1) benchmark. Every candidate nests the AR benchmark, so
+significance uses the Clark-West (2007) adjusted-MSPE test; the Diebold-Mariano statistic
+(HLN-corrected) is reported for reference only, as it is undersized for nested models.
 """
 from __future__ import annotations
 
@@ -27,27 +28,50 @@ import pandas as pd
 import statsmodels.api as sm
 from scipy import stats
 
-from ..transform.ytd import fill_janfeb
 
 
 def _me(s: pd.Series) -> pd.Series:
-    """Month-end index; Jan filled from Jan-Feb for NBS combined-release series (fill_janfeb)."""
+    """Month-end index, values as published. No January fill: for NBS Jan-Feb releases the
+    February value is one observation; copying it into January would make January's value equal
+    to (and published together with) February's, leaking the target into its own AR lag."""
     s = s.copy()
     s.index = pd.to_datetime(s.index) + pd.offsets.MonthEnd(0)
-    return fill_janfeb(s.sort_index())   # no-op for quarterly series and where January exists
+    return s.sort_index()
 
 
 def design(target: pd.Series, predictors: dict[str, tuple[pd.Series, int]], use: list[str], ar: int = 1) -> pd.DataFrame:
-    y = _me(target).rename("y")
+    """Rows = published target months. All lags are time-based on a full monthly (or quarterly)
+    index: the AR term is the last target value published before t (for a Jan-Feb release that
+    is December), and a predictor with publication lag L enters as its value at t - L months."""
+    y = _me(target).dropna().rename("y")
+    quarterly = len(y) > 2 and set(y.index.month) <= {3, 6, 9, 12}
+    freq, step = ("QE", 3) if quarterly else ("ME", 1)
+    full = pd.date_range(y.index.min(), y.index.max(), freq=freq)
+    yf = y.reindex(full).ffill(limit=2)
     cols = {"y": y}
     for i in range(1, ar + 1):
-        cols[f"y_l{i}"] = y.shift(i)
+        cols[f"y_l{i}"] = yf.shift(i).reindex(y.index)
     for name in use:
         s, lag = predictors[name]
-        s = _me(s)
-        s = s.reindex(s.index.union(y.index))
-        cols[name] = s.shift(lag).reindex(y.index)
+        s = _me(s).dropna()
+        if s.empty:
+            cols[name] = pd.Series(np.nan, index=y.index)
+            continue
+        idx = pd.date_range(min(s.index.min(), full.min()), max(s.index.max(), full.max()), freq=freq)
+        sf = s.reindex(idx)
+        cols[name] = sf.shift(lag // step if quarterly else lag).reindex(y.index)
     return pd.DataFrame(cols)
+
+
+def clark_west(e_model: np.ndarray, e_bench: np.ndarray, f_model: np.ndarray, f_bench: np.ndarray) -> tuple[float, float]:
+    """Clark-West (2007) test for nested models (benchmark nested in the model).
+    H0: equal accuracy; one-sided p-value for the larger model being more accurate."""
+    adj = e_bench ** 2 - (e_model ** 2 - (f_bench - f_model) ** 2)
+    n = len(adj)
+    if n < 8:
+        return np.nan, np.nan
+    stat = adj.mean() / (adj.std(ddof=1) / np.sqrt(n))
+    return float(stat), float(1 - stats.norm.cdf(stat))
 
 
 def dm_test(e_model: np.ndarray, e_bench: np.ndarray, h: int = 1) -> tuple[float, float]:
@@ -115,11 +139,12 @@ def evaluate(target: pd.Series, predictors: dict[str, tuple[pd.Series, int]], mo
         r_m, r_m_ex = score(e_m, origins)
         r_b, r_b_ex = score(e_b, origins)
         stat, p = dm_test(e_m, e_b)
+        cw, cw_p = clark_west(e_m, e_b, np.array([f_m[t] for t in origins]), np.array([f_b[t] for t in origins]))
         out["models"][m] = {
             "predictors": use, "n_oos": len(origins), "oos_start": str(origins[0].date()), "oos_end": str(origins[-1].date()),
             "rmse": r_m, "rmse_ar_same_sample": r_b, "rmse_ex_excluded_window": r_m_ex,
-            "rel_rmse_vs_ar": r_m / r_b, "dm_stat": stat, "dm_p": p,
-            "beats_ar": bool(r_m < r_b and p == p and p < 0.10),
+            "rel_rmse_vs_ar": r_m / r_b, "dm_stat": stat, "dm_p": p, "cw_stat": cw, "cw_p": cw_p,
+            "beats_ar": bool(r_m < r_b and cw_p == cw_p and cw_p < 0.10),
         }
         out["forecasts"][m] = {str(t.date()): v for t, v in f_m.items()}
         out["forecasts"].setdefault("AR(1) benchmark", {}).update({str(t.date()): v for t, v in f_b.items()})
@@ -140,7 +165,9 @@ def live_nowcast(target: pd.Series, predictors: dict[str, tuple[pd.Series, int]]
     y = _me(target).dropna()
     t_next = y.index.max() + pd.offsets.MonthEnd(1)
     D = design(y, predictors, use, ar)
-    # append the target month: lagged predictors and the AR term are known before its release
+    # next target month (skip January: NBS publishes Jan-Feb together in February)
+    if t_next.month == 1:
+        t_next = t_next + pd.offsets.MonthEnd(1)
     row = {"y": np.nan, **{f"y_l{i}": y.iloc[-i] for i in range(1, ar + 1)}}
     for name in use:
         s, lag = predictors[name]

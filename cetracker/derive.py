@@ -27,7 +27,7 @@ class Deriver:
         self.obs = store.latest(obs)
         self.rows: list[pd.DataFrame] = []
         self.cache: dict[str, pd.Series] = {}
-        self._vint: dict[str, str] = {}
+        self._vser: dict[str, pd.Series] = {}
 
     def get(self, sid: str) -> pd.Series:
         if sid in self.cache:
@@ -37,19 +37,38 @@ class Deriver:
     def has(self, *sids) -> bool:
         return all(len(self.get(s).dropna()) > 0 for s in sids)
 
+    def vintages(self, sid: str) -> pd.Series:
+        """Per-period vintage dates of a series (fetched: from the store; derived: as computed)."""
+        if sid in self._vser:
+            return self._vser[sid]
+        d = self.obs[self.obs.series_id == sid]
+        if d.empty:
+            return pd.Series(dtype=object)
+        v = pd.Series(d["vintage_date"].values, index=pd.to_datetime(d["period"])).sort_index()
+        self._vser[sid] = v
+        return v
+
     def put(self, sid: str, s: pd.Series, transform: str, inputs: list[str], flags=""):
+        """Store a derived series. Each period's vintage is the latest vintage among the inputs'
+        values at or before that period (as-of), so as_of() reconstructs what was computable on a
+        date instead of stamping the whole history with the newest release."""
         s = s.replace([np.inf, -np.inf], np.nan).dropna()
         if s.empty:
             return
         self.cache[sid] = s
-        vint = max((self.obs[self.obs.series_id == i]["vintage_date"].max() for i in inputs
-                    if (self.obs.series_id == i).any()), default="") or ""
-        if not vint:
-            vint = max((self._vint.get(i, "") for i in inputs), default="")
-        self._vint[sid] = vint
-        prov = store.Provenance("tracker", "derived", vintage_date=vint,
-                                lineage=f"{transform}({','.join(inputs)})")
-        self.rows.append(store.make_rows(sid, s, prov, flags))
+        per = pd.Series("", index=s.index, dtype=object)
+        for i in inputs:
+            v = self.vintages(i)
+            if v.empty:
+                continue
+            v = v[~v.index.duplicated(keep="last")]
+            aligned = v.reindex(v.index.union(s.index)).ffill().reindex(s.index).fillna("")
+            per = pd.Series(np.where(aligned.values > per.values, aligned.values, per.values), index=s.index)
+        self._vser[sid] = per
+        prov = store.Provenance("tracker", "derived", vintage_date="", lineage=f"{transform}({','.join(inputs)})")
+        rows = store.make_rows(sid, s, prov, flags)
+        rows["vintage_date"] = per.reindex(pd.to_datetime(rows["period"])).values
+        self.rows.append(rows)
 
     # ------------------------------------------------------------------ activity
     def ytd_family(self, base: str):
@@ -69,7 +88,11 @@ class Deriver:
             self.put(f"{ytd_id}~cyoy", cy, "comparable_single_month_yoy", [ytd_id, yoy_id])
             self.put(f"{ytd_id}~cyoy~3mma", cy.rolling(3, min_periods=3).mean(), "trailing_mean_3", [f"{ytd_id}~cyoy"])
         self.put(f"{ytd_id}~sm~nyoy", Y.naive_yoy(sm), "naive_yoy_from_levels", [f"{ytd_id}~sm"])
-        self.seasonal(f"{ytd_id}~sm_split", janfeb=True)
+        if self.has(f"{ytd_id}~cyoy"):
+            cl = Y.chain_comparable_level(sp, self.get(f"{ytd_id}~cyoy"))
+            self.put(f"{ytd_id}~clevel", cl, "chain_comparable_level[seed=first 12 months]",
+                     [f"{ytd_id}~sm_split", f"{ytd_id}~cyoy"])
+            self.seasonal(f"{ytd_id}~clevel", janfeb=True)
 
     def seasonal(self, sid: str, janfeb: bool = False):
         s = self.get(sid).dropna()
@@ -97,8 +120,14 @@ class Deriver:
     def activity(self):
         for base in ("retail", "fai", "fai.re_ytd", "re.starts_ytd", "re.completions_ytd", "re.sales_ytd"):
             self.ytd_family(base)
-        if self.has("retail.level"):
-            self.seasonal("retail.level", janfeb=False)
+        if self.has("retail.level", "retail.yoy"):
+            # published single-month level has Feb = Jan-Feb combined: split evenly, then chain
+            sm = self.get("retail.level")
+            fl = pd.Series({t: "janfeb_combined" for t in sm.index if t.month == 2 and (t - pd.offsets.MonthEnd(1)) not in sm.index})
+            sp, _ = Y.split_janfeb(sm, fl)
+            cl = Y.chain_comparable_level(sp, self.get("retail.yoy"))
+            self.put("retail.level~clevel", cl, "chain_comparable_level[seed=first 12 months]", ["retail.level", "retail.yoy"])
+            self.seasonal("retail.level~clevel", janfeb=True)
         # real growth
         if self.has("retail.yoy", "prices.cpi_goods_yoy"):
             self.put("retail.yoy~real", D.real_yoy(self.get("retail.yoy"), self.get("prices.cpi_goods_yoy")),
@@ -112,18 +141,17 @@ class Deriver:
         for sid in ("ip.yoy", "retail.yoy", "proxy.cement_yoy", "proxy.steel_yoy", "proxy.power_yoy"):
             if self.has(sid):
                 self.put(f"{sid}~3mma", self.get(sid).rolling(3, min_periods=3).mean(), "trailing_mean_3", [sid])
-        # 2019-based CAGR for the COVID-distorted window
-        for sid in ("ip.yoy", "retail.yoy", "fai.ytd~cyoy"):
-            if self.has(sid):
-                self.put(f"{sid}~cagr2019", Y.cagr_vs_2019(None, self.get(sid)), "cagr_vs_2019", [sid])
 
     # ------------------------------------------------------------------ GDP
     def gdp(self):
         """Quarterly nominal GDP from YTD releases; sector contributions to YTD real growth."""
         def q_from_ytd(sid):
+            # time-based: Q1 = YTD(Mar); Qk = YTD(k) - YTD(k-1) only when that previous quarter exists
             y = self.get(sid).dropna()
-            prev = y.groupby(y.index.year).shift(1)
-            q = (y - prev.fillna(0)).where((y.index.month == 3) | prev.notna())
+            y = y.reindex(pd.date_range(y.index.min(), y.index.max(), freq="QE"))
+            prev = y.shift(1)
+            q = y - prev
+            q[y.index.month == 3] = y[y.index.month == 3]
             return q.dropna()
         if self.has("gdp.nominal_ytd"):
             self.put("gdp.nominal_q", q_from_ytd("gdp.nominal_ytd"), "quarter_from_ytd", ["gdp.nominal_ytd"])
@@ -196,11 +224,12 @@ class Deriver:
 
     # ------------------------------------------------------------------ bonds
     def bonds(self):
-        if self.has("lgb.refi_total", "lgb.refi_debt_swap"):
-            r = self.get("lgb.refi_total")
-            sw = self.get("lgb.refi_debt_swap").reindex(r.index).fillna(0.0)
-            self.put("lgb.refi_regular", r - sw, "difference[refi_total-debt_swap(missing=0)]",
-                     ["lgb.refi_total", "lgb.refi_debt_swap"])
+        if self.has("lgb.refi_special"):
+            # MOF never states the hidden-debt swap amount. The 2024-26 swap programme is issued as
+            # refinancing special bonds, so from 2024-11 refi_special is shown as a labelled proxy.
+            rs = self.get("lgb.refi_special")
+            self.put("lgb.refi_swap_proxy", rs[rs.index >= "2024-11-30"], "proxy[refi_special since 2024-11]",
+                     ["lgb.refi_special"], "proxy_not_reported_by_mof")
         if self.has("lgb.general_new", "lgb.special_new"):
             nm = self.get("lgb.general_new").add(self.get("lgb.special_new"), fill_value=np.nan)
             self.put("lgb.new_total", nm, "sum", ["lgb.general_new", "lgb.special_new"])
@@ -238,12 +267,12 @@ class Deriver:
                 df = pd.DataFrame({i.split(".", 3)[3]: self.get(i) for i in ids})
                 agg = H.tier_aggregate(df)
                 for tier in agg.columns:
-                    self.put(f"hp.{seg}.{tier}.{h}", agg[tier], "tier_mean[index-100]", ids[:3] + ["..."])
+                    self.put(f"hp.{seg}.{tier}.{h}", agg[tier], "tier_mean[index-100]", ids)
                 if h == "mom":
                     lvl = H.chain_level(agg)
                     for tier in lvl.columns:
-                        self.put(f"hp.{seg}.{tier}.level", lvl[tier], "chain_index[2015=100]", [f"hp.{seg}.{tier}.mom"])
-                    self.put(f"hp.{seg}.breadth_down", H.breadth(df), "count[index<100]", ids[:3] + ["..."])
+                        self.put(f"hp.{seg}.{tier}.level", lvl[tier], "chain_index[2022avg=100]", [f"hp.{seg}.{tier}.mom"])
+                    self.put(f"hp.{seg}.breadth_down", H.breadth(df), "count[index<100]", ids)
 
     def run(self) -> pd.DataFrame:
         for step in (self.gdp, self.activity, self.credit, self.bonds, self.projects, self.housing):

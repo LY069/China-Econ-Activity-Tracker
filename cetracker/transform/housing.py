@@ -8,11 +8,14 @@ series in the data portal; the release text quotes tier m/m and y/y.
 Tier aggregate method (documented, reproducible):
     tier m/m % = simple mean over tier cities of (index_mom - 100)
     tier y/y % = simple mean over tier cities of (index_yoy - 100)
-    tier level = chain of (1 + m/m/100), base 2015 average = 100 (rebased after chaining)
+    tier level = chain of (1 + m/m/100), base 2022 average = 100 (the first full year of
+                 the NBS release archive); a month with no m/m is shown as a gap, and the
+                 chain resumes afterwards assuming no change over the missing month
 Simple (unweighted) means match NBS commentary convention; a sales-weighted variant
 would need city transaction weights NBS does not publish monthly.
-Validation: tier m/m and y/y vs the figures in the NBS release text (tolerance 0.05pp,
-the rounding of the published figure); a tier is reported only if all its cities report.
+Validation: tier m/m and y/y vs the figures in the NBS interpretation text (tolerance 0.1pp:
+published tier figures are rounded to 0.1 and city indices to 0.1 before averaging); a tier
+is reported only if all its cities report.
 """
 from __future__ import annotations
 
@@ -50,8 +53,10 @@ def tier_aggregate(city_idx: pd.DataFrame, require_all: bool = True) -> pd.DataF
     return pd.DataFrame(out)
 
 
-def chain_level(mom_pct: pd.DataFrame, base_year: int = 2015) -> pd.DataFrame:
-    lvl = (1 + mom_pct.fillna(np.nan) / 100.0).cumprod()
+def chain_level(mom_pct: pd.DataFrame, base_year: int = 2022) -> pd.DataFrame:
+    full = mom_pct.reindex(pd.date_range(mom_pct.index.min(), mom_pct.index.max(), freq="ME"))
+    lvl = (1 + full.fillna(0) / 100.0).cumprod()
+    lvl = lvl.where(full.notna())                     # gaps are shown as gaps, not as 0% change
     if base_year in set(lvl.index.year):
         lvl = lvl / lvl[lvl.index.year == base_year].mean() * 100
     else:

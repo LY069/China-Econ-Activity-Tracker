@@ -166,7 +166,9 @@ def release_text(source: str, url: str) -> tuple[str, str, str, str]:
     for t in soup(["script", "style"]):
         t.decompose()
     text = soup.get_text("\n")
-    m = re.search(r"(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})", " ".join(soup.find_all(string=re.compile("发布时间|日期"))[:1]) or "")
+    # publication date: '发布时间：2026-09-14' (NBS/MOF), '文章来源：2026-09-1417:00:00' (PBoC)
+    flat = re.sub(r"\s+", "", text)
+    m = re.search(r"(?:发布时间|发布日期|文章来源|日期)[:：]?(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})", flat)
     pub = f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}" if m else ""
     return text, raw, ts, pub
 
@@ -292,8 +294,10 @@ def ingest_mof_lgb(pages: int = 40) -> pd.DataFrame:
             p = releases.mof_local_bonds(text)
             for b in p.get("blocks", []):
                 recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub or item["date"]))
-        fields = ["new_general", "new_special", "refi_total", "refi_general", "refi_special", "total", "redemption", "swap_refi"]
-        mapping = {"new_general": "lgb.general_new", "new_special": "lgb.special_new", "refi_total": "lgb.refi_total",
+        fields = ["new_total", "new_general", "new_special", "refi_total", "refi_general", "refi_special", "total",
+                  "redemption", "swap_refi"]
+        mapping = {"new_total": "lgb.new_total_reported",
+                   "new_general": "lgb.general_new", "new_special": "lgb.special_new", "refi_total": "lgb.refi_total",
                    "total": "lgb.total", "redemption": "lgb.redemption", "swap_refi": "lgb.refi_debt_swap",
                    "refi_general": "lgb.refi_general", "refi_special": "lgb.refi_special"}
         rows += _rows_from_fields(_blocks_to_monthly(recs, fields), mapping, "MOF", "primary")
@@ -364,6 +368,13 @@ def title_period(title: str, url_date: str, text: str = "") -> pd.Timestamp | No
     ud = pd.Timestamp(url_date) if url_date else None
     for ph, mth in QUARTER_PHRASE.items():
         if ph in title and not re.search(r"\d{1,2}月", title):
+            if not y and text:
+                t = re.sub(r"\s+", "", text)
+                y = re.search(r"(20\d\d)年" + ph, t)
+                if not y:
+                    rd = re.search(r"[（(](20\d\d)年(\d{1,2})月\d{1,2}日[）)]", t)   # release-date line
+                    if rd:
+                        return _month_end(int(rd.group(1)) - (1 if mth == 12 else 0), mth)
             year = int(y.group(1)) if y else (ud.year - 1 if (ud is not None and mth == 12) else ud.year if ud is not None else None)
             return _month_end(year, mth) if year else None
     ms = re.findall(r"(\d{1,2})月", title)
@@ -565,9 +576,10 @@ def ingest_pboc_tables(first_year: int = 2012) -> pd.DataFrame:
                 prov = store.Provenance("PBoC", "primary", url, raw, ts, ts[:10], lineage=f"pboc_table:{kind}:{yr}")
                 if kind == "tsf_flow":
                     df = PT.tsf_flow_table(html)
-                    for col in df.columns:
+                    fl = df["restated"].map({True: "restated_current_definition", False: ""})
+                    for col in df.columns.drop("restated"):
                         sid = "tsf.flow" if col == "flow" else f"tsf.{col}"
-                        rows.append(store.make_rows(sid, df[col] / 10, prov))
+                        rows.append(store.make_rows(sid, df[col].dropna() / 10, prov, fl))
                 elif kind == "tsf_stock":
                     df = PT.tsf_stock_table(html)
                     tot = df[df.item == "stock"].set_index("period")
@@ -585,6 +597,8 @@ def ingest_pboc_tables(first_year: int = 2012) -> pd.DataFrame:
                 counts[kind] += 1
             except Exception as e:
                 errors.append(f"{yr} {kind}: {type(e).__name__}: {str(e)[:120]}")
+        for df in rows:   # tables carry no publication date: vintage = retrieval date, flagged
+            df["flags"] = df["flags"].where(df["flags"] == "", df["flags"] + ",") + "vintage_from_retrieval"
         _status("PBoC tables", bool(rows), tables=dict(counts), errors=errors[:20])
     except Exception as e:
         _status("PBoC tables", False, error=f"{type(e).__name__}: {str(e)[:300]}")
@@ -617,4 +631,15 @@ def run_all() -> pd.DataFrame:
         except Exception:
             _status(fn.__name__, False, error=traceback.format_exc()[-400:])
     frames = [f for f in frames if len(f)]
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=store.COLUMNS)
+    if not frames:
+        return pd.DataFrame(columns=store.COLUMNS)
+    out = pd.concat(frames, ignore_index=True)
+    # a value cannot be published before its reference period ends: such rows carry a wrong
+    # period or vintage (e.g. a year inferred from a re-dated archive URL) and are rejected
+    bad = out["vintage_date"] < out["period"]
+    if bad.any():
+        STATUS["_rejected_rows"] = {
+            "reason": "vintage_date earlier than period end",
+            "count": int(bad.sum()),
+            "examples": out[bad][["series_id", "period", "vintage_date", "source_url"]].head(20).to_dict(orient="records")}
+    return out[~bad].reset_index(drop=True)

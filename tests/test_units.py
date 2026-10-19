@@ -186,3 +186,15 @@ def test_nowcast_per_model_samples():
     r = N.evaluate(y, {"x": (x, 0), "short": (short, 0)}, {"m_x": ["x"], "m_short": ["short"]}, min_train=48)
     assert r["models"]["m_x"]["n_oos"] > 50 and r["models"]["m_x"]["beats_ar"]
     assert "insufficient" in r["models"]["m_short"]["status"]
+
+
+
+def test_lead_lag_no_janfeb_artefact():
+    """Monthly series with January missing: differencing must not create a 2-month change in Feb
+    nor copy it into January (review finding 8)."""
+    from cetracker.analytics import lags
+    idx = pd.date_range("2018-01-31", "2025-12-31", freq="ME")
+    s = pd.Series(np.arange(len(idx), dtype=float), idx)       # +1 every month, nonstationary
+    s = s[s.index.month != 1]
+    d, how = lags.make_stationary(s)
+    assert how == "diff1" and d.dropna().eq(1.0).all() and d[d.index.month.isin([1, 2])].isna().all()

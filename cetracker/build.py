@@ -48,7 +48,9 @@ PAIRS = [
     ("ndrc.approvals_value", "fai.ytd~cyoy", "NDRC approvals -> FAI"),
 ]
 # publication lags (months) used by the nowcast ragged edge; see analytics/nowcast.py
-PUB_LAG = {"lgb.new_total~impulse_stk": 0, "tsf.govt_bonds~impulse_stk": 1,
+# MOF's monthly local-bond release appears 24-31 days after month end, i.e. after NBS activity
+# data for the same month: L = 1 (not 0) to avoid look-ahead.
+PUB_LAG = {"lgb.new_total~impulse_stk": 1, "tsf.govt_bonds~impulse_stk": 1,
            "tsf.flow_ex_govt~impulse_stk": 1, "tsf.flow~impulse_stk": 1, "ndrc.approvals_value": 1,
            "money.m1_m2_gap": 1}
 COVID = ("2020-01-31", "2021-12-31")
@@ -182,8 +184,7 @@ def update_nowcast_log(live: dict, get, built_at: str) -> pd.DataFrame:
 def bond_tables(get) -> dict:
     out = {}
     for sid, cat in [("lgb.special_new", "lg_special_new"), ("lgb.general_new", "lg_general_new"),
-                     ("lgb.refi_debt_swap", "lg_refi_debt_swap"), ("cgb.ultra_long_special", "cgb_ultra_long_special"),
-                     ("cgb.bank_recap_special", "cgb_bank_recap_special"), ("lgb.refi_total", "lg_refi_regular")]:
+                     ("lgb.refi_swap_proxy", "lg_refi_debt_swap"), ("lgb.refi_total", "lg_refi_total")]:
         s = get(sid)
         if s.empty:
             continue
@@ -198,22 +199,31 @@ def bond_tables(get) -> dict:
 
 
 def export_catalog(obs: pd.DataFrame, notes: dict) -> dict:
+    """Per series: values plus per-point provenance. 'src' lists the distinct sources
+    (url, raw file, vintage, tier, lineage) and 'si' gives each point's index into it, so every
+    plotted value traces to the exact raw response it came from."""
     lat = store.latest(obs)
+    nvint = obs.groupby("series_id")["vintage_date"].nunique()
     cat = {}
     for sid, d in lat.groupby("series_id"):
         d = d.sort_values("period")
         m = registry.meta(sid)
         last = d.iloc[-1]
+        keys = list(zip(d["source_url"], d["raw_file"], d["vintage_date"], d["source_tier"], d["lineage"]))
+        uniq = list(dict.fromkeys(keys))
+        pos = {k: i for i, k in enumerate(uniq)}
         cat[sid] = {
             "meta": {k: m.get(k) for k in ("name", "unit", "freq", "group", "kind")},
             "t": d["period"].tolist(), "v": d["value"].round(6).tolist(),
             "flags": {p: f for p, f in zip(d["period"], d["flags"]) if f},
+            "src": [{"url": u, "raw": r, "vintage": v, "tier": t, "lineage": l} for u, r, v, t, l in uniq],
+            "si": [pos[k] for k in keys],
             "prov": {"source": last["source"], "tier": last["source_tier"], "url": last["source_url"],
                      "raw_file": last["raw_file"], "retrieved_at": last["retrieved_at"],
                      "vintage": last["vintage_date"], "lineage": last["lineage"],
-                     "n_vintages": int(obs[obs.series_id == sid]["vintage_date"].nunique()),
+                     "n_vintages": int(nvint.get(sid, 1)),
                      "tiers_used": sorted(d["source_tier"].unique().tolist())},
-            "note": notes.get(sid, ""),
+            "note": notes.get(sid, "") or m.get("note", ""),
         }
     return cat
 
@@ -250,7 +260,7 @@ def main(offline: bool = False):
         from . import ingest
         new = ingest.run_all()
         if len(new):
-            store.append(new)
+            store.append_fetched(new)
         status = ingest.STATUS
     else:
         status = json.loads((DATA / "source_status.json").read_text()) if (DATA / "source_status.json").exists() else {}

@@ -206,9 +206,12 @@ function seriesTable(series){
   const ids = series.map(s=>s.id); const map = new Map();
   ids.forEach((id,j)=>pts(id).forEach(([t,v])=>{ if(!map.has(t)) map.set(t, Array(ids.length).fill(null)); map.get(t)[j]=v; }));
   const rows = [...map.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
-  const tbl = el("table"); const thead = el("tr",{}, el("th",{},"Period"), ...ids.map(id=>el("th",{}, S(id)?.meta?.name||id)));
+  const tbl = el("table"); const thead = el("tr",{}, el("th",{},"Period"), ...ids.map(id=>el("th",{}, S(id)?.meta?.name||id)), el("th",{},"Source of each value"));
   tbl.append(el("thead",{},thead)); const tb = el("tbody");
-  rows.forEach(([t,vals]) => tb.append(el("tr",{}, el("td",{},t), ...vals.map(v=>el("td",{class:"num"}, fmt(v,2))))));
+  const srcOf = (id,t) => { const s=S(id); if(!s||!s.si) return null; const i=s.t.indexOf(t); return i<0?null:s.src[s.si[i]]; };
+  rows.forEach(([t,vals]) => { const links = el("td",{class:"mono"});
+    ids.forEach(id=>{ const sr=srcOf(id,t); if(!sr) return; if (sr.url) links.append(el("a",{href:sr.url,target:"_blank",rel:"noopener",title:`${id} · vintage ${sr.vintage} · raw ${sr.raw||"–"} · ${sr.lineage}`}, sr.tier==="derived"?"calc":"src"), " "); else links.append(el("span",{title:`${id} · ${sr.lineage}`},"calc")," "); });
+    tb.append(el("tr",{}, el("td",{},t), ...vals.map(v=>el("td",{class:"num"}, fmt(v,2))), links)); });
   tbl.append(tb); return el("div",{class:"tablewrap",style:"max-height:260px"}, tbl);
 }
 
@@ -249,12 +252,10 @@ const VIEWS = {
   gdp: {label:"GDP", render: () => [
     chartCard({title:"Real GDP growth", sub:"% y/y, quarterly · NBS", unit:"%", series:[{id:"gdp.real_yoy",label:"Real GDP y/y"}]}),
     chartCard({title:"Real GDP, q/q seasonally adjusted (NBS)", sub:"% q/q · NBS published SA", unit:"%", type:"bar", zero:true, series:[{id:"gdp.sa_qoq",label:"GDP q/q SA"}]}),
-    chartCard({title:"Contributions to real GDP growth by sector", sub:"pp · prior-year nominal share × sector real growth (tracker estimate)", unit:"pp", type:"bar", stack:true, zero:true,
+    chartCard({title:"Contributions to real GDP growth by sector", sub:"pp of YTD real growth · tracker estimate", unit:"pp", type:"bar", stack:true, zero:true,
       series:[{id:"gdp.contrib_primary",label:"Primary"},{id:"gdp.contrib_secondary",label:"Secondary"},{id:"gdp.contrib_tertiary",label:"Tertiary"}],
-      note:"Approximation; sum differs from headline by chain-weighting effects. NBS-published contributions shown below (annual)."}),
-    chartCard({title:"Contributions by expenditure (NBS, annual)", sub:"pp of real GDP growth", unit:"pp", type:"bar", stack:true, zero:true,
-      series:[{id:"gdp.contrib_consumption",label:"Consumption"},{id:"gdp.contrib_investment",label:"Investment"},{id:"gdp.contrib_netexports",label:"Net exports"}]}),
-    chartCard({title:"Sector real growth", sub:"% y/y · NBS", unit:"%", series:[{id:"gdp.primary_real_yoy",label:"Primary"},{id:"gdp.secondary_real_yoy",label:"Secondary"},{id:"gdp.tertiary_real_yoy",label:"Tertiary"}]}),
+      note:"Tracker approximation: prior-year YTD nominal share × sector YTD real growth; the sum differs from headline growth by price and chain-weighting effects."}),
+    chartCard({title:"Sector real growth, year-to-date", sub:"% y/y, YTD · NBS", unit:"%", series:[{id:"gdp.primary_real_ytd_yoy",label:"Primary"},{id:"gdp.secondary_real_ytd_yoy",label:"Secondary"},{id:"gdp.tertiary_real_ytd_yoy",label:"Tertiary"}]}),
   ]},
   activity: {label:"Activity", filters:{measure:[["yoy","y/y"],["sa","SA m/m"],["real","Real y/y"],["level","Level"]]}, render: renderActivity},
   credit: {label:"Credit", render: () => [
@@ -325,13 +326,12 @@ function renderActivity(){
     C.push(chartCard({title:"Retail sales", sub:"% y/y · NBS published vs tracker comparable-basis reconstruction", unit:"%", series:[{id:"retail.yoy",label:"Published"},{id:"retail.ytd~cyoy",label:"Reconstructed from YTD"}]}));
     C.push(chartCard({title:"Fixed-asset investment, single month", sub:"% y/y, comparable basis (implied from YTD releases) · tracker calc", unit:"%", series:[{id:"fai.ytd~cyoy",label:"Single month"},{id:"fai.ytd_yoy",label:"YTD (published)"}]}));
     C.push(chartCard({title:"FAI by sector", sub:"% YTD y/y · NBS", unit:"%", series:[{id:"fai.infra_ytd_yoy",label:"Infrastructure (ex power)"},{id:"fai.mfg_ytd_yoy",label:"Manufacturing"},{id:"fai.re_ytd_yoy",label:"Real estate"}]}));
-    C.push(chartCard({title:"2019-based growth (COVID base effects removed)", sub:"% annualised vs same month of 2019 · 2021–2023 only", unit:"%", series:[{id:"ip.yoy~cagr2019",label:"IP"},{id:"retail.yoy~cagr2019",label:"Retail"},{id:"fai.ytd~cyoy~cagr2019",label:"FAI"}]}));
     C.push(chartCard({title:"Published vs level-implied y/y: the comparable-basis gap", sub:"% y/y · gap = NBS sample/base adjustments", unit:"%", series:[{id:"fai.ytd_yoy",label:"FAI YTD published"},{id:"fai.ytd~sm~nyoy",label:"Single month from levels (naive)"}]}));
   } else if (m==="sa"){
-    C.push(chartCard({title:"Retail sales, seasonally adjusted", sub:"% m/m SA · tracker X-13 with Lunar New Year regressors", unit:"%", type:"bar", zero:true, series:[{id:"retail.level~sa_mom",label:"m/m SA"}]}));
-    C.push(chartCard({title:"Retail sales: SA level, X-13 vs STL cross-check", sub:"RMB bn · two methods", unit:"RMB bn", series:[{id:"retail.level~sa",label:"X-13"},{id:"retail.level~sa_stl",label:"STL cross-check"}]}));
-    C.push(chartCard({title:"FAI, seasonally adjusted (single month)", sub:"% m/m SA · Jan/Feb split evenly, then X-13", unit:"%", type:"bar", zero:true, series:[{id:"fai.ytd~sm_split~sa_mom",label:"m/m SA"}]}));
-    C.push(chartCard({title:"FAI momentum", sub:"% 3m/3m annualised, SA", unit:"%", zero:true, series:[{id:"fai.ytd~sm_split~saar3",label:"FAI"},{id:"retail.level~saar3",label:"Retail"}]}));
+    C.push(chartCard({title:"Retail sales, seasonally adjusted", sub:"% m/m SA · X-13 with Lunar New Year regressors, on the implied comparable-basis level", unit:"%", type:"bar", zero:true, series:[{id:"retail.level~clevel~sa_mom",label:"m/m SA"}]}));
+    C.push(chartCard({title:"Retail sales: SA level, X-13 vs STL cross-check", sub:"implied comparable-basis level (RMB bn) · X-13 vs STL", unit:"RMB bn", series:[{id:"retail.level~clevel~sa",label:"X-13"},{id:"retail.level~clevel~sa_stl",label:"STL cross-check"}]}));
+    C.push(chartCard({title:"FAI, seasonally adjusted (single month)", sub:"% m/m SA · comparable-basis level chained from official-consistent y/y (removes January sample-redraw jumps), then X-13", unit:"%", type:"bar", zero:true, series:[{id:"fai.ytd~clevel~sa_mom",label:"m/m SA"}]}));
+    C.push(chartCard({title:"FAI momentum", sub:"% 3m/3m annualised, SA", unit:"%", zero:true, series:[{id:"fai.ytd~clevel~saar3",label:"FAI"},{id:"retail.level~clevel~saar3",label:"Retail"}]}));
     C.push(el("div",{class:"card"}, el("h3",{},"Why there is no tracker SA series for industrial production"),
       el("p",{class:"note"},"NBS publishes only growth rates for industrial value-added, not levels, so a level series cannot be built for seasonal adjustment. Rebuilding one from y/y rates would need an unknown base-year seasonal pattern. The tracker shows NBS y/y and its 3-month average instead.")));
   } else if (m==="real"){
@@ -355,7 +355,7 @@ function renderProperty(){
       series:["tier1","tier2","tier3"].map((t,i)=>({id:`hp.${seg}.${t}.mom`,label:t.replace("tier","Tier ")}))}),
     chartCard({title:`Home prices by city tier, y/y (${segn})`, sub:"% y/y · tracker tier means", unit:"%", zero:true,
       series:["tier1","tier2","tier3"].map(t=>({id:`hp.${seg}.${t}.yoy`,label:t.replace("tier","Tier ")}))}),
-    chartCard({title:`Home price level by tier (${segn})`, sub:"chained index, 2015 = 100", unit:"index",
+    chartCard({title:`Home price level by tier (${segn})`, sub:"chained index, 2022 average = 100 (gaps not bridged)", unit:"index",
       series:["tier1","tier2","tier3"].map(t=>({id:`hp.${seg}.${t}.level`,label:t.replace("tier","Tier ")}))}),
     chartCard({title:"Breadth: cities with falling prices", sub:"number of 70 cities with m/m decline", unit:"cities", type:"bar", zero:true, series:[{id:`hp.${seg}.breadth_down`,label:"Cities down m/m"}]}),
     chartCard({title:"National Real Estate Climate Index", sub:"index · NBS (国房景气指数)", unit:"index", series:[{id:"re.climate",label:"Climate index"}], bands:[100]}),
@@ -370,10 +370,10 @@ function renderProperty(){
 function renderBonds(){
   const out = [];
   out.push(chartCard({title:"Local government bond issuance by type", sub:"RMB bn per month · MOF", unit:"RMB bn", type:"bar", stack:true, zero:true,
-    series:[{id:"lgb.special_new",label:"New special"},{id:"lgb.general_new",label:"New general"},{id:"lgb.refi_regular",label:"Refinancing (regular)"},{id:"lgb.refi_debt_swap",label:"Refinancing (debt swap)"}],
-    note:"New money = new general + new special. Debt-swap refinancing (2023 special refinancing; 2024–26 RMB6trn programme) funds no new projects."}));
-  out.push(chartCard({title:"Central government bond issuance by type", sub:"RMB bn per month", unit:"RMB bn", type:"bar", stack:true, zero:true,
-    series:[{id:"cgb.regular",label:"Regular CGB"},{id:"cgb.ultra_long_special",label:"Ultra-long special"},{id:"cgb.bank_recap_special",label:"Bank-recap special"}]}));
+    series:[{id:"lgb.special_new",label:"New special"},{id:"lgb.general_new",label:"New general"},{id:"lgb.refi_general",label:"Refinancing, general"},{id:"lgb.refi_special",label:"Refinancing, special"}],
+    note:"New money = new general + new special. MOF does not report the hidden-debt swap amount; since 2024-11 the swap programme (RMB2trn a year) is issued as special refinancing bonds, shown below as a labelled proxy. Refinancing funds no new projects."}));
+  out.push(chartCard({title:"Debt-swap issuance (proxy)", sub:"RMB bn per month · special refinancing bonds since 2024-11 · MOF does not state the swap amount", unit:"RMB bn", type:"bar", zero:true,
+    series:[{id:"lgb.refi_swap_proxy",label:"Special refinancing (swap proxy)"}]}));
   out.push(chartCard({title:"Implied central net financing", sub:"RMB bn · PBoC TSF govt-bond line – MOF local net issuance (reconciliation)", unit:"RMB bn", type:"bar", zero:true,
     series:[{id:"cgb.net_implied",label:"Implied CGB net"}]}));
   out.push(chartCard({title:"Fiscal impulse from local bonds", sub:"Δ12m of 12-month issuance, % of GDP", unit:"%", zero:true,
@@ -492,15 +492,15 @@ function renderLeadLag(){
 
 function renderNowcast(){
   const a = state.data?.analytics || {}; const out = [];
-  out.push(el("p",{class:"note"},"This is a pseudo real-time evaluation. Each predictor is lagged by its publication delay, models are re-estimated on an expanding window, and each is scored against an AR(1) benchmark with Diebold–Mariano tests (HLN-corrected). Estimation excludes 2020–21. Live nowcasts are logged before each release and scored once the official figure arrives."));
+  out.push(el("p",{class:"note"},"This is a pseudo real-time evaluation. Each predictor is lagged by its publication delay, models are re-estimated on an expanding window, and each is scored against an AR(1) benchmark refitted on the same sample. Significance uses the Clark–West test for nested models. Estimation excludes 2020–21. Live nowcasts are logged before each release and scored once the official figure arrives."));
   for (const key of ["fai","gdp"]){
     const ev = a.nowcast?.[key];
     out.push(el("h2",{}, key==="fai"?"FAI single-month growth (comparable basis)":"Real GDP growth (bridge, first month of quarter)"));
     if (!ev || ev.error){ out.push(el("div",{class:"empty"}, `Not evaluated: ${ev?.error||"no data"}`)); continue; }
-    const tb = el("table"); tb.append(el("thead",{},el("tr",{},...["Model","OOS months","RMSE","AR RMSE (same sample)","Relative to AR","DM p","Beats AR (p<0.10)"].map(h=>el("th",{},h)))));
+    const tb = el("table"); tb.append(el("thead",{},el("tr",{},...["Model","OOS months","RMSE","AR RMSE (same sample)","Relative to AR","Clark–West p","Beats AR (CW p<0.10)"].map(h=>el("th",{},h)))));
     const body = el("tbody");
     Object.entries(ev.models).forEach(([m,r])=>body.append(r.status ? el("tr",{},el("td",{},m),el("td",{colspan:6},r.status)) :
-      el("tr",{},el("td",{},m),el("td",{class:"num"},`${r.n_oos} (${r.oos_start} to ${r.oos_end})`),el("td",{class:"num"},fmt(r.rmse,2)),el("td",{class:"num"},fmt(r.rmse_ar_same_sample,2)),el("td",{class:"num"},fmt(r.rel_rmse_vs_ar,3)),el("td",{class:"num"},fmt(r.dm_p,3)),el("td",{}, r.beats_ar?"yes":"no"))));
+      el("tr",{},el("td",{},m),el("td",{class:"num"},`${r.n_oos} (${r.oos_start} to ${r.oos_end})`),el("td",{class:"num"},fmt(r.rmse,2)),el("td",{class:"num"},fmt(r.rmse_ar_same_sample,2)),el("td",{class:"num"},fmt(r.rel_rmse_vs_ar,3)),el("td",{class:"num"},fmt(r.cw_p,3)),el("td",{}, r.beats_ar?"yes":"no"))));
     tb.append(body);
     out.push(el("div",{class:"card"}, el("div",{class:"csub"},`Each model is scored against an AR(1) benchmark refitted on that model's own sample. Target ${ev.target}.`), el("div",{class:"tablewrap"},tb)));
     const box = el("div",{class:"chart"}); out.push(el("div",{class:"card"}, el("h3",{},"Out-of-sample nowcasts vs actual"), box));
@@ -595,6 +595,8 @@ function render(){
   const reach = d.source_status?._reachability || {};
   const down = Object.entries(reach).filter(([k,v])=>!v.ok).map(([k])=>k);
   const nfb = Object.values(d.catalog||{}).filter(s=>s.prov.tier==="fallback").length;
+  const nfail = (d.validation||[]).filter(v=>v.status==="FAIL");
+  if (nfail.length) banner.append(el("div",{class:"banner",style:"border-color:var(--critical)"}, el("span",{class:"status FAIL"},el("i"),"Validation failures "), ` ${nfail.length} check(s) failed at the last build: values in the affected series may be wrong until fixed. `, el("a",{href:"#",onclick:(e)=>{e.preventDefault();state.tab="validation";render();}},"See Validation"), "."));
   if (!d.catalog || !Object.keys(d.catalog).length) banner.append(el("div",{class:"banner"}, el("strong",{},"No data in the store yet. "), down.length?`The build environment could not reach: ${down.join(", ")}. Charts fill in when a build can reach the sources.`:"Run the build to populate the store."));
   else if (down.length || nfb) banner.append(el("div",{class:"banner"}, el("strong",{},"Partial coverage. "), down.length?`Unreachable at last build: ${down.join(", ")}. `:"", nfb?`${nfb} series come from fallback sources and are marked as such.`:""));
   const tabs = document.getElementById("tabs"); tabs.textContent="";

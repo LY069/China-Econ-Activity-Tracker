@@ -154,3 +154,23 @@ def fill_janfeb(s: pd.Series) -> pd.Series:
         if jan not in s.index:
             add[jan] = s[t]
     return pd.concat([s, pd.Series(add, dtype=float)]).sort_index() if add else s
+
+
+def chain_comparable_level(level_split: pd.Series, yoy: pd.Series) -> pd.Series:
+    """Implied comparable-basis level: L_t = L_{t-12} * (1 + g_t/100), seeded with the first
+    12 observed single-month levels (Jan/Feb split evenly) and chained with official-consistent
+    y/y g_t (January takes the Jan-Feb growth). Published NBS levels jump each January because
+    the above-size sample is redrawn; this series removes those jumps, so seasonal adjustment
+    and m/m momentum are not driven by sample changes."""
+    lv = level_split.copy()
+    lv.index = pd.to_datetime(lv.index) + pd.offsets.MonthEnd(0)
+    g = fill_janfeb(yoy)
+    idx = pd.date_range(lv.dropna().index.min(), max(lv.index.max(), g.index.max()), freq="ME")
+    lv, g = lv.reindex(idx), g.reindex(idx)
+    out = pd.Series(np.nan, index=idx)
+    out.iloc[:12] = lv.iloc[:12]
+    for i in range(12, len(idx)):
+        prev = out.iloc[i - 12]
+        if pd.notna(prev) and pd.notna(g.iloc[i]):
+            out.iloc[i] = prev * (1 + g.iloc[i] / 100)
+    return out.dropna()

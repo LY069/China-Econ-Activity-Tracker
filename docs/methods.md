@@ -25,10 +25,24 @@ one vintage*:
 **Rules enforced in code** (`store.validate`): fetched rows must reference a raw file;
 derived rows must carry lineage; manual rows must cite a URL; NaNs are never stored.
 
-**Vintages.** `store.append` writes a row only when the (series, period) is new or its value
-differs from the latest stored vintage. Unchanged history is never re-stamped, so the store's
-vintages are first-publication and revision dates. `store.as_of(date)` rebuilds what was
-known on any date.
+**Vintages.**
+- `store.append_fetched` first drops rows previously parsed from any raw file re-parsed in the
+  same run, so a parser fix replaces its own earlier output (wrong values, periods or vintages).
+- A changed source page has a new content hash, so genuine revisions accumulate as new vintages.
+- Rows whose vintage precedes their period end are rejected (they signal a wrong period or vintage).
+- `store.as_of(date)` rebuilds what was known on any date.
+
+Vintage sources:
+- **NBS:** the release URL date. Pages re-dated by NBS's 2023 site migration get period end +
+  17 days, flagged `vintage_estimated_archive`.
+- **PBoC releases:** the page's publication time.
+- **PBoC statistics tables:** no publication date, so the retrieval date, flagged
+  `vintage_from_retrieval`.
+- **Derived rows:** each period takes the latest vintage among its inputs' values as of that
+  period, not the newest release for the whole history.
+
+The store was reset once (19 Oct 2026) after the independent review found parser defects; it is
+now a deterministic function of the archived raw responses.
 
 **Raw archive.** Raw files are content-addressed: `data/raw/<source>/<request-hash>/<content-hash>.<ext>`,
 each with a `.meta.json` holding the URL, parameters and first retrieval time. An unchanged
@@ -85,6 +99,16 @@ therefore differs from published growth. The tracker:
    adjustments, not an error.
 
 ### 2.3 Seasonal adjustment (`transform/seasonal.py`)
+**Input series.** Seasonal adjustment never runs on raw NBS levels: those jump each January when
+the above-size sample is redrawn. It runs on an implied comparable-basis level
+(`~clevel`, `ytd.chain_comparable_level`): the first 12 observed single-month levels, chained
+forward with official-consistent y/y, `L_t = L_{t-12}(1+g_t)`. This applies to FAI, property and
+retail (retail is chained from published single-month levels and y/y).
+
+**Revisions.** X-11 seasonal factors are two-sided: adding data revises past SA values and the
+3m/3m SAAR built on them. These series describe history and current momentum, but they are
+not real-time-safe signals. Only the trailing means and the y/y-based series are one-sided.
+
 - **Primary:** X-13ARIMA-SEATS (Census binary via the `x13binary` wheel), X-11 decomposition,
   automatic ARIMA model selection. Three user-defined Spring Festival regressors: pre-holiday
   [−20, −1] days, holiday week [0, +6], post-holiday restart [+7, +20]. Each regressor is the
@@ -127,6 +151,9 @@ Entries marked `status: unverified` have their dates checked against the primary
 first fetch.
 
 ### 2.6 Government bonds (`transform/fiscal.py`)
+- **Debt-swap issuance proxy:** MOF's monthly text never states the hidden-debt swap amount.
+  Since 2024-11 the swap programme is issued as refinancing special bonds, so `lgb.refi_swap_proxy`
+  = refinancing special bonds from 2024-11, labelled as a proxy everywhere it appears.
 - **Categories:**
   - Central: regular CGB, ultra-long special CGB, bank-recap special CGB.
   - Local: new general, new special, regular refinancing, debt-swap refinancing.
@@ -170,14 +197,16 @@ first fetch.
 
 ### 3.1 Lead/lag tests (`analytics/lags.py`)
 For each pair (high-frequency x, official y):
-1. **Alignment:** common observations restricted to the longest run of consecutive months, so
-   that positional shifts never pair the wrong months.
+1. **Alignment:** both series sit on a full monthly index; missing months, such as January for
+   NBS Jan–Feb releases, stay missing. No month is filled. Lags and differences are time-based,
+   and correlations use pairwise-complete months, so nothing is paired with the wrong month and no
+   two-month change is treated as one month. The test runs only with ≥ 36 jointly observed months.
 2. **Stationarity:** ADF and KPSS; a series failing either test is first-differenced.
 3. **Prewhitening:** fit AR(p) to x (AIC, p ≤ 12), filter both series with it, then
    cross-correlate the residuals. The 95% band is ±1.96/√n.
-4. **ADL:** fitted with BIC lag selection and Newey–West HAC errors. Reports Σ x-coefficients
-   with its p-value and the long-run multiplier.
-5. **Granger F-test** at the ADL lag order.
+4. **ADL:** BIC lag selection on a single common sample, then Newey–West HAC errors. Reports
+   Σ x-coefficients with its p-value and the long-run multiplier.
+5. **Granger F-test** of the x lags, on the same rows as the ADL.
 6. **Rolling 36-month prewhitened correlation**, to check stability.
 7. **Breaks:**
    - Chow tests at register dates.
@@ -199,15 +228,21 @@ prewhitening an MA-smoothed series is imperfect. Smoothed series are display-onl
 
 ### 3.2 Nowcasts (`analytics/nowcast.py`)
 - **Target:** FAI single-month growth (comparable basis). Predictors are tested one at a time
-  against an AR(1) benchmark: new local bonds, special bonds, NDRC approvals, credit impulse
-  ex-government, and bonds + credit.
+  against an AR(1) benchmark: government-bond net-financing impulse, new local bonds, NDRC
+  approvals, credit impulse ex-government, and bonds + credit.
+- **Impulse scaling:** for inference the impulses are scaled by the TSF stock 12 months earlier
+  (`~impulse_stk`). Scaling by GDP (`~impulse`) leaves only about 30 observations, because NBS
+  release pages give GDP only from late 2021; both versions are charted.
+- **No January fill:** a Jan–Feb release is one observation, and its AR lag is December.
+  Filling January from February would put the target inside its own lag.
 - **GDP bridge:** quarterly averages of the first month of the quarter (IP, real retail, real
   FAI, credit impulse).
-- **Ragged edge:** each predictor is lagged by its publication delay. Bonds: 0 months. PBoC
-  credit, NDRC and NBS activity: 1 month.
-- **Evaluation:** expanding window, scored by RMSE, relative RMSE and the Diebold–Mariano test
-  with the Harvey–Leybourne–Newbold correction. Estimation excludes 2020–21; errors are
-  reported with and without it.
+- **Ragged edge:** each predictor is lagged by its publication delay. MOF local bonds, PBoC credit,
+  NDRC and NBS activity: 1 month. (MOF publishes 24–31 days after month end, after NBS activity
+  data.)
+- **Evaluation:** expanding window, each model against an AR(1) refitted on the same sample.
+  Every model nests the benchmark, so significance uses the Clark–West test; Diebold–Mariano
+  (HLN) is reported for reference. Estimation excludes 2020–21.
 - **Pseudo real-time:** estimation uses the latest vintage with the ragged edge replicated.
   True real-time evaluation becomes possible as the vintage store accumulates. Every live
   nowcast is appended to `data/nowcast_log.csv` before the release and scored after it.
@@ -224,7 +259,31 @@ prewhitening an MA-smoothed series is imperfect. Smoothed series are display-onl
 - **Audit:** a random sample is labelled by an independent labeller who never sees the rule
   output; precision and recall by category are published.
 
-## 4. Release calendar assumptions
+## 4. Validation groups (`validate/checks.py`)
+- **Accounting identities:**
+  - Loan stocks by sector and tenor (exact, PBoC credit table).
+  - Local bonds: total = new + refinancing.
+  - Local bonds: general + special = MOF's separately reported new total.
+  - TSF components vs total (residual = PBoC's unpublished "other", WARN).
+  - Published single-month retail sales vs the change in published YTD.
+- **Cross-source reconciliation:**
+  - PBoC table vs PBoC release text (loans, TSF).
+  - TSF government bonds − MOF local net vs NPC central quotas.
+  - TSF stock y/y.
+- **Published y/y reproduction:**
+  - Retail comparable single-month y/y, within a rounding bound propagated from the 0.1pp
+    rounding of YTD growth.
+  - M1/M2 from levels; M1 2025 uses PBoC's restated 2024 base.
+  - Tier aggregates vs NBS interpretation text.
+  - Naive-vs-published gap logs.
+- **Coverage:** missing months per key series (January excluded for Jan–Feb releases).
+- **Plausibility:** magnitude bounds on key series and rolling-median checks that catch a block
+  in the wrong unit. The 2017–19 PBoC share block that the review found would FAIL here.
+- **Physical proxies:** direction agreement of 3-month changes.
+
+A FAIL blocks Pages deployment and shows a banner in the app.
+
+## 5. Release calendar assumptions
 - **NBS:** monthly activity around the 15th–17th of the following month, at 10:00 Beijing time.
   Quarterly GDP comes with the March, June, September and December activity data.
 - **PBoC:** credit data around the 10th–15th.

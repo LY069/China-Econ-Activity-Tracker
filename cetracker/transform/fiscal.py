@@ -72,6 +72,8 @@ def classify_local_bond(name: str, bond_type: str = "", use_of_proceeds: str = "
 def classify_central_bond(name: str) -> str:
     if "超长期特别国债" in name:
         return "cgb_ultra_long_special"
+    if "抗疫特别国债" in name:
+        return "cgb_covid_special"
     if "特别国债" in name:
         return "cgb_bank_recap_special"
     return "cgb_regular"

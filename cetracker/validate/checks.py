@@ -59,6 +59,51 @@ def pair_check(get, cid, group, desc, a_id, b_id, tol_abs, warn_only=False):
                 _exc_list(df, ["computed", "published", "diff"]))
 
 
+def coverage(get, sid, janfeb: bool):
+    """Months missing between a series' first and last observation (January excluded for NBS
+    Jan-Feb releases). A gap is a missing release or a parse failure; it is reported, not filled."""
+    cid, desc = f"coverage:{sid}", f"No missing months between first and last observation: {sid}"
+    s = get(sid)
+    if s.empty:
+        return _missing(cid, "Coverage", desc, [sid])
+    full = pd.date_range(s.index.min(), s.index.max(), freq="ME")
+    if janfeb:
+        full = full[full.month != 1]
+    miss = full.difference(s.index)
+    return _rec(cid, "Coverage", desc, "PASS" if len(miss) == 0 else "WARN", len(full), len(miss), "0 missing",
+                f"{s.index.min().date()} to {s.index.max().date()}", [{"period": str(m.date())} for m in miss])
+
+
+PLAUSIBLE = {   # (series, min |median|, max |value|) in RMB bn: catches unit / block errors
+    "tsf.flow": (500, 20000), "tsf.rmb_loans": (300, 15000), "loans_stock.total": (20000, 600000),
+    "money.m2": (50000, 1000000), "retail.level": (1500, 10000), "fai.ytd": (1000, 70000),
+    "lgb.total": (50, 3000), "gdp.nominal_ytd": (10000, 200000),
+}
+
+
+def plausibility(get) -> list[dict]:
+    """Magnitude bounds for key series plus a robust outlier screen (|x - median| > 10 MAD of
+    month-on-month changes). Out-of-bounds magnitudes FAIL; outliers WARN for review."""
+    out = []
+    for sid, (lo_med, hi_abs) in PLAUSIBLE.items():
+        cid, desc = f"plausible:{sid}", f"Magnitude plausible (median |x| >= {lo_med}, all |x| <= {hi_abs} RMB bn): {sid}"
+        s = get(sid)
+        if s.empty:
+            out.append(_missing(cid, "Plausibility", desc, [sid]))
+            continue
+        bad = s[(s.abs() > hi_abs)]
+        med_ok = s.abs().median() >= lo_med
+        # windows of 12 months with an implausibly small median (a block in the wrong unit)
+        roll = s.abs().rolling(12, min_periods=6).median()
+        small = roll[roll < lo_med / 5]
+        exc = [{"period": str(t.date()), "value": round(float(v), 3)} for t, v in bad.items()]
+        exc += [{"period": str(t.date()), "rolling_median_abs": round(float(v), 3)} for t, v in small.items()]
+        ok = med_ok and not len(bad) and not len(small)
+        out.append(_rec(cid, "Plausibility", desc, "PASS" if ok else "FAIL", len(s), len(exc), f"[{lo_med}, {hi_abs}]",
+                        f"median |x| {s.abs().median():.1f}", exc))
+    return out
+
+
 def ytd_roundtrip(get, ytd_id):
     """Single months (Jan/Feb split) must cumulate back to published YTD. Only months whose
     whole within-year chain is present are testable; months after a data gap are counted and
@@ -270,12 +315,18 @@ def run(get) -> list[dict]:
                         "money.m1~yoy_calc", "money.m1_yoy", tol_abs=0.15, warn_only=True))
     R.append(identity(get, "id:lgb_total", "Local bonds: new + refinancing = total issuance", "lgb.total",
                       ["lgb.new_total", "lgb.refi_total"], tol_abs=1.0))
-    R.append(identity(get, "id:lgb_new", "Local bonds: new general + new special = new total", "lgb.new_total",
-                      ["lgb.general_new", "lgb.special_new"], tol_abs=1.0))
+    R.append(identity(get, "id:lgb_new", "Local bonds: new general + new special = new total reported by MOF",
+                      "lgb.new_total_reported", ["lgb.general_new", "lgb.special_new"], tol_abs=0.1))
     R.append(identity(get, "id:lgb_refi", "Local bonds: refinancing general + special = refinancing total",
                       "lgb.refi_total", ["lgb.refi_general", "lgb.refi_special"], tol_abs=1.0))
-    for y in ("retail.ytd", "fai.ytd", "fai.re_ytd", "re.starts_ytd", "re.completions_ytd", "re.sales_ytd"):
-        R.append(ytd_roundtrip(get, y))
+    R.append(pair_check(get, "id:retail_month_vs_ytd", "Accounting identity",
+                        "Published single-month retail sales = change in published YTD retail sales (months 3-12)",
+                        "retail.ytd~sm", "retail.level", tol_abs=0.15))
+    for sid, janfeb in (("retail.ytd", True), ("fai.ytd", True), ("ip.yoy", True), ("prices.cpi_yoy", False),
+                        ("prices.ppi_yoy", False), ("fai.re_ytd", True), ("re.sales_ytd", True), ("tsf.flow", False),
+                        ("loans_stock.total", False), ("money.m2", False), ("lgb.total", False)):
+        R.append(coverage(get, sid, janfeb))
+    R.extend(plausibility(get))
     R.append(yoy_reproduction(get, "retail.ytd", "retail.ytd_yoy", "retail.yoy"))
     R.append(naive_gap(get, "retail.level", "retail.yoy"))
     R.append(naive_gap(get, "fai.ytd", "fai.ytd_yoy"))

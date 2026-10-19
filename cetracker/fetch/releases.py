@@ -211,7 +211,7 @@ def nbs_infra_fai(text: str) -> dict:
     """NBS FAI release: YTD y/y (%) for infrastructure / manufacturing / real estate investment."""
     t = _clean(text)
     out = {}
-    for cn, k in [(r"基础设施投资(?:\([^)]{0,20}\))?", "infra_ytd_yoy"), ("制造业投资", "mfg_ytd_yoy"),
+    for cn, k in [(r"基础设施投资(?:\([^)]{0,20}\))?", "infra_ytd_yoy"), (r"(?<!高技术)(?<!装备)制造业投资", "mfg_ytd_yoy"),
                   ("房地产开发投资", "re_ytd_yoy")]:
         mm = re.search(cn + r"(?:同比)?(增长|下降)" + NUM + "%", t)
         if mm:
@@ -285,13 +285,22 @@ def _first(rx: str, t: str):
 
 
 def nbs_retail(text: str) -> dict:
-    """'1—9月份，社会消费品零售总额370001亿元，同比增长1.1%' and '9月份，社会消费品零售总额42433亿元，同比增长1.1%'."""
+    """YTD and single-month retail sales (RMB bn, y/y %).
+
+    Forms: '1—9月份，社会消费品零售总额370001亿元，同比增长1.1%' (YTD);
+    '2021年，社会消费品零售总额440823亿元，比上年增长12.5%' (full year = December YTD);
+    '1—2月份，…' (Jan-Feb: YTD and the single February observation coincide);
+    '9月份，社会消费品零售总额42433亿元，同比增长1.1%[，环比增长0.06%]' (single month)."""
     t = _clean(text)
     out = {}
-    m = _first(r"1[—\-–]\d{1,2}月份,社会消费品零售总额" + NUM + r"亿元,同比(增长|下降)" + NUM + "%", t)
+    m = (_first(r"1[—\-–]\d{1,2}月份,社会消费品零售总额" + NUM + r"亿元,(?:同比|比上年)?(增长|下降)" + NUM + "%", t)
+         or _first(r"(?:20\d\d年|全年),社会消费品零售总额" + NUM + r"亿元,(?:同比|比上年)?(增长|下降)" + NUM + "%", t))
     if m:
         out["retail.ytd"], out["retail.ytd_yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
-    m = _first(r"(?<![—\-–\d])\d{1,2}月份,社会消费品零售总额" + NUM + r"亿元,同比(增长|下降)" + NUM + r"%(?:,环比(增长|下降)" + NUM + "%)?", t)
+    jf = _first(r"1[—\-–]2月份,社会消费品零售总额" + NUM + r"亿元,(?:同比)?(增长|下降)" + NUM + "%", t)
+    if jf:
+        out["retail.level"], out["retail.yoy"] = float(jf.group(1)) / 10, _sgn(jf.group(2), jf.group(3))
+    m = _first(r"(?<![—\-–\d])\d{1,2}月份,社会消费品零售总额" + NUM + r"亿元,(?:同比)?(增长|下降)" + NUM + r"%(?:,环比(增长|下降)" + NUM + "%)?", t)
     if m:
         out["retail.level"], out["retail.yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
         if m.group(4):
@@ -308,9 +317,13 @@ def nbs_ip(text: str) -> dict:
     m = _first(r"规模以上工业增加值比上月(增长|下降)" + NUM + "%", t) or _first(r"规模以上工业增加值同比(?:实际)?(?:增长|下降)[\d.]+%,环比(增长|下降)" + NUM + "%", t)
     if m:
         out["ip.mom_sa_nbs"] = _sgn(m.group(1), m.group(2))
-    m = _first(r"1[—\-–]\d{1,2}月份,(?:全国)?规模以上工业增加值同比(增长|下降)" + NUM + "%", t)
+    m = (_first(r"1[—\-–]\d{1,2}月份,(?:全国)?规模以上工业增加值(?:同比)?(?:实际)?(增长|下降)" + NUM + "%", t)
+         or _first(r"(?:20\d\d年|全年),(?:全国)?规模以上工业增加值(?:比上年|同比)?(?:实际)?(增长|下降)" + NUM + "%", t))
     if m:
         out["ip.ytd_yoy"] = _sgn(m.group(1), m.group(2))
+    jf = _first(r"1[—\-–]2月份,(?:全国)?规模以上工业增加值(?:同比)?(?:实际)?(增长|下降)" + NUM + "%", t)
+    if jf and "ip.yoy" not in out:      # Jan-Feb release: the single (February) observation = Jan-Feb growth
+        out["ip.yoy"] = _sgn(jf.group(1), jf.group(2))
     for name, sid in [("水泥", "proxy.cement_yoy"), ("钢材", "proxy.steel_yoy"), ("发电量", "proxy.power_yoy")]:
         m = _first(name + NUM + r"(?:万吨|亿千瓦时),(?:同比)?(增长|下降)" + NUM + "%", t)
         if m:
@@ -326,7 +339,7 @@ def nbs_property(text: str) -> dict:
         (r"全国房地产开发投资" + NUM + r"亿元,(?:比上年|同比)(增长|下降)" + NUM, "fai.re_ytd", 0.1),
         (r"房屋新开工面积" + NUM + r"万平方米,(?:同比)?(增长|下降)" + NUM, "re.starts_ytd", 0.01),
         (r"房屋竣工面积" + NUM + r"万平方米,(?:同比)?(增长|下降)" + NUM, "re.completions_ytd", 0.01),
-        (r"新建商品房销售面积" + NUM + r"万平方米,(?:比上年|同比)?(增长|下降)" + NUM, "re.sales_ytd", 0.01),
+        (r"(?:新建)?商品房销售面积" + NUM + r"万平方米,(?:比上年|同比)?(增长|下降)" + NUM, "re.sales_ytd", 0.01),
     ]
     for rx, sid, sc in pats:
         m = _first(rx, t)
@@ -356,8 +369,13 @@ def nbs_cpi(text: str) -> dict:
 
 def nbs_ppi(text: str) -> dict:
     t = _clean(text)
-    m = _first(r"全国工业生产者出厂价格同比(上涨|下降)" + NUM + "%", t)
-    return {"prices.ppi_yoy": _sgn(m.group(1), m.group(2))} if m else {}
+    m = (_first(r"全国工业生产者出厂价格同比(上涨|下降)" + NUM + "%", t)
+         or _first(r"全国工业生产者出厂价格和购进价格同比(?:均|分别)?(上涨|下降)" + NUM + "%", t))
+    if m:
+        return {"prices.ppi_yoy": _sgn(m.group(1), m.group(2))}
+    if _first(r"全国工业生产者出厂价格同比持平", t):
+        return {"prices.ppi_yoy": 0.0}
+    return {}
 
 
 QUARTER_WORD = {"一季度": 1, "二季度": 2, "三季度": 3, "四季度": 4}

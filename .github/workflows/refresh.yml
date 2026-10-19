@@ -71,13 +71,14 @@ jobs:
             sleep $((i * 5))
           done
           exit 1
+      # publish the app only when every step (including the FAIL gate) succeeded
       - uses: actions/upload-pages-artifact@v3
-        if: always() && github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main'
         with:
           path: site
   deploy:
     needs: refresh
-    if: always() && github.ref == 'refs/heads/main'
+    if: success() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

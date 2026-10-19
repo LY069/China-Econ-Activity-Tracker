@@ -28,8 +28,8 @@ def _check(vals, cid):
     return next(v for v in vals if v["id"] == cid)
 
 
-@pytest.mark.parametrize("cid", ["id:hh_loan_stock", "id:corp_loan_stock", "id:loans_sector", "id:lgb_total", "id:lgb_new", "id:lgb_refi",
-                                 "ytd_roundtrip:retail.ytd", "ytd_roundtrip:fai.ytd"])
+@pytest.mark.parametrize("cid", ["id:hh_loan_stock", "id:corp_loan_stock", "id:loans_sector", "id:lgb_total", "id:lgb_refi",
+                                 "id:retail_month_vs_ytd"])
 def test_identities_pass(pipeline, cid):
     _, vals = pipeline
     assert _check(vals, cid)["status"] == "PASS", _check(vals, cid)

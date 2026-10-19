@@ -153,9 +153,9 @@ for k, n in [("cgb.regular", "Central govt bonds: regular, gross issuance"),
              ("lgb.refi_total", "Local govt bonds: refinancing, total"),
              ("lgb.refi_general", "Local govt bonds: refinancing, general"),
              ("lgb.refi_special", "Local govt bonds: refinancing, special"),
-             ("lgb.refi_debt_swap", "Local govt bonds: debt-swap refinancing"),
-             ("lgb.refi_regular", "Local govt bonds: regular refinancing"),
+             ("lgb.refi_swap_proxy", "Local govt bonds: special refinancing since 2024-11 (proxy for debt-swap issuance)"),
              ("lgb.total", "Local govt bonds: total issuance"),
+             ("lgb.new_total_reported", "Local govt bonds: new issuance, total as reported by MOF"),
              ("lgb.redemption", "Local govt bonds: principal redemptions")]:
     reg(k, n, "RMB bn", "M", "Bonds", "flow", bonds=True)
 
@@ -168,7 +168,7 @@ for seg, segn in [("new", "new commercial residential"), ("used", "second-hand r
     for tier in ("tier1", "tier2", "tier3", "all70"):
         reg(f"hp.{seg}.{tier}.mom", f"Home prices {segn}, {tier}, m/m", "%", "M", "Property", "mom", city70=seg)
         reg(f"hp.{seg}.{tier}.yoy", f"Home prices {segn}, {tier}, y/y", "%", "M", "Property", "yoy", city70=seg)
-        reg(f"hp.{seg}.{tier}.level", f"Home prices {segn}, {tier}, chained index 2015=100", "index", "M",
+        reg(f"hp.{seg}.{tier}.level", f"Home prices {segn}, {tier}, chained index 2022=100", "index", "M",
             "Property", "index", city70=seg)
     reg(f"hp.{seg}.breadth_down", f"Cities with m/m decline ({segn})", "cities of 70", "M", "Property", "count", city70=seg)
 

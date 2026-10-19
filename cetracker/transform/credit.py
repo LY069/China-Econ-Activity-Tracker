@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-# NBS publishes quarterly GDP ~15-20 days after quarter end. A quarter is usable from
-# the month after quarter end + 1 (e.g. Q1 -> usable for May), conservative real-time rule.
+# NBS publishes quarterly GDP ~15-20 days after quarter end, so a quarter is usable from the
+# month after quarter end (Q1, published mid-April, is used from April onward).
 GDP_PUBLICATION_LAG_MONTHS = 1
 
 
@@ -32,6 +32,9 @@ def rolling12(flow: pd.Series) -> pd.Series:
 def gdp_4q_monthly(gdp_q_nominal: pd.Series, months: pd.DatetimeIndex) -> pd.Series:
     """Trailing 4-quarter nominal GDP available at each month (step function)."""
     q = _me(gdp_q_nominal)
+    # time-based window: reindex to every quarter so a missing quarter yields NaN, never a sum of
+    # four non-consecutive quarters
+    q = q.reindex(pd.date_range(q.index.min(), q.index.max(), freq="QE"))
     s4 = q.rolling(4, min_periods=4).sum().dropna()
     avail = s4.copy()
     avail.index = avail.index + pd.offsets.MonthEnd(GDP_PUBLICATION_LAG_MONTHS)

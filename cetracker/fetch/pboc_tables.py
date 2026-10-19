@@ -58,23 +58,50 @@ def _me(y: str, m: str) -> pd.Timestamp:
 
 
 def tsf_flow_table(html: str) -> pd.DataFrame:
-    """DataFrame index=month-end, columns among TSF_COLS values (亿元)."""
+    """Monthly TSF flows (亿元) by component.
+
+    A page can hold several blocks, each introduced by a '单位：' (unit) row: the year's flows,
+    and (2019 page) 表1 = flows for 2017-19 restated to the current definition, and 表2 = the same
+    as percentage shares. Only 亿元 blocks are read; for a month present in several blocks the
+    later block (the restated one) wins and the row is flagged in the 'restated' column."""
     rows = _rows(html)
-    header = None
+    blocks, unit, header, pending = [], None, None, None
     for r in rows:
-        if any(c.startswith("社会融资规模") for c in r) and any("人民币贷款" in c for c in r):
-            header = [k for k in (_tsf_key(c) for c in r) if k]
-            break
-    if not header:
-        raise ValueError("TSF flow header not found")
-    data = {}
-    for r in rows:
+        if r[0].startswith("单位"):
+            unit = "yi" if "亿元" in r[0] else "pct" if "%" in r[0] else "other"
+            header, pending = None, None
+            blocks.append({"unit": unit, "rows": {}, "header": None})
+            continue
+        if not blocks:
+            continue
+        b = blocks[-1]
+        if b["header"] is None:
+            keys = [k for k in (_tsf_key(c) for c in r) if k]
+            if pending is not None:
+                keys = pending + [k for k in keys if k not in pending]
+            if "rmb_loans" in keys and "flow" in keys:
+                b["header"] = keys
+            elif "flow" in keys:
+                pending = keys            # header split over two rows (total, then components)
+            continue
         m = PERIOD.match(r[0])
-        if m and len(r) - 1 == len(header) and all(NUM.match(x) for x in r[1:]):
-            data[_me(*m.groups())] = [float(x) for x in r[1:]]
-    if not data:
-        raise ValueError("no TSF flow rows")
-    return pd.DataFrame.from_dict(data, orient="index", columns=header).sort_index()
+        if m and len(r) - 1 == len(b["header"]) and all(NUM.match(x) for x in r[1:]):
+            b["rows"][_me(*m.groups())] = [float(x) for x in r[1:]]
+    frames = []
+    for i, b in enumerate(blocks):
+        if b["unit"] != "yi" or not b["rows"] or not b["header"]:
+            continue
+        df = pd.DataFrame.from_dict(b["rows"], orient="index", columns=b["header"]).sort_index()
+        df["restated"] = i > 0 and any(bb["unit"] == "yi" and bb["rows"] for bb in blocks[:i])
+        frames.append(df)
+    if not frames:
+        raise ValueError("no TSF flow rows in 亿元 blocks")
+    out = pd.concat(frames)
+    out = out[~out.index.duplicated(keep="last")].sort_index()
+    # magnitude sanity: monthly TSF is thousands of 亿元; a share block (≤100) must never pass
+    if (out["flow"].abs().median() < 1000):
+        raise ValueError("TSF flow magnitudes implausible (looks like a % share block)")
+    return out
 
 
 def tsf_stock_table(html: str) -> pd.DataFrame:

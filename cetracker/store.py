@@ -119,6 +119,22 @@ def append(new: pd.DataFrame, path: Path = OBS_FILE) -> pd.DataFrame:
     return allrows
 
 
+def append_fetched(new: pd.DataFrame, path: Path = OBS_FILE) -> pd.DataFrame:
+    """Write freshly parsed rows from fetched sources.
+
+    Rows previously parsed from a raw file that was re-parsed in this run are dropped first, so a
+    parser fix replaces its own earlier output (wrong values, periods or vintages) instead of
+    leaving it behind as a stale 'latest' vintage. Raw files not re-parsed keep their rows: a
+    changed source page has a new content hash, so genuine revisions accumulate as new vintages."""
+    validate(new)
+    old = load(path)
+    if len(old):
+        touched = set(new["raw_file"].unique())
+        old = old[~old["raw_file"].isin(touched)]
+        old.to_parquet(path, index=False) if len(old) else path.unlink(missing_ok=True)
+    return append(new, path)
+
+
 def replace_derived(new: pd.DataFrame, path: Path = OBS_FILE) -> pd.DataFrame:
     """Derived rows are recomputed on every build: drop all old derived rows, write the new set."""
     validate(new)
