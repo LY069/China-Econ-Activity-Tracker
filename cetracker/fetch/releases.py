@@ -219,7 +219,8 @@ def nbs_infra_fai(text: str) -> dict:
     out = {}
     for cn, k in [(r"基础设施投资(?:\([^)]{0,20}\))?", "infra_ytd_yoy"), (r"(?<!高技术)(?<!装备)制造业投资", "mfg_ytd_yoy"),
                   ("房地产开发投资", "re_ytd_yoy")]:
-        mm = re.search(cn + r"(?:同比)?(增长|下降)" + NUM + "%", t)
+        # December releases say '比上年增长'
+        mm = re.search(cn + r"(?:同比|比上年)?(增长|下降)" + NUM + "%", t)
         if mm:
             v = float(mm.group(2))
             out[k] = -v if mm.group(1) == "下降" else v

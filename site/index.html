@@ -273,7 +273,7 @@ const VIEWS = {
     chartCard({title:"New loans by tenor", sub:"RMB bn per month · PBoC", unit:"RMB bn", type:"bar", stack:true, zero:true,
       series:[{id:"loans.hh_short",label:"HH short"},{id:"loans.hh_medlong",label:"HH med/long"},{id:"loans.corp_short",label:"Corp short"},{id:"loans.corp_medlong",label:"Corp med/long"},{id:"loans.corp_bills",label:"Bills"}]}),
     chartCard({title:"M1 and M2 growth", sub:"% y/y · PBoC/NBS", unit:"%", series:[{id:"money.m2_yoy",label:"M2"},{id:"money.m1_yoy",label:"M1"}], note:"M1 redefined from Jan 2025 (household demand deposits + payment-institution reserves added): see break marker."}),
-    chartCard({title:"M1 – M2 growth gap", sub:"pp · tracker calc", unit:"pp", zero:true, series:[{id:"money.m1_m2_gap",label:"M1-M2"}]}),
+    chartCard({title:"M1 – M2 growth gap", sub:"pp · published y/y from 2021; earlier months from money-supply table levels (flagged from_levels; up to ~1pp off published, e.g. M2 Dec-2014) · M1 redefined Jan-2025", unit:"pp", zero:true, series:[{id:"money.m1_m2_gap",label:"M1-M2"}]}),
   ]},
   property: {label:"Property", filters:{segment:[["new","New homes"],["used","Second-hand"]]}, render: renderProperty},
   bonds: {label:"Bonds & fiscal", render: renderBonds},
@@ -372,7 +372,7 @@ function renderBonds(){
   out.push(chartCard({title:"Local government bond issuance by type", sub:"RMB bn per month · MOF", unit:"RMB bn", type:"bar", stack:true, zero:true,
     series:[{id:"lgb.special_new",label:"New special"},{id:"lgb.general_new",label:"New general"},{id:"lgb.refi_general",label:"Refinancing, general"},{id:"lgb.refi_special",label:"Refinancing, special"}],
     note:"New money = new general + new special. MOF does not report the hidden-debt swap amount; since 2024-11 the swap programme (RMB2trn a year) is issued as special refinancing bonds, shown below as a labelled proxy. Refinancing funds no new projects."}));
-  out.push(chartCard({title:"Debt-swap issuance (proxy)", sub:"RMB bn per month · special refinancing bonds since 2024-11 · MOF does not state the swap amount", unit:"RMB bn", type:"bar", zero:true,
+  out.push(chartCard({title:"Debt-swap issuance (proxy)", sub:"RMB bn per month · all special refinancing bonds since 2024-11, which also include ordinary rollover of maturing special bonds, so this overstates the swap (2025 to September: RMB2.8trn against a RMB2trn quota) · MOF does not state the swap amount", unit:"RMB bn", type:"bar", zero:true,
     series:[{id:"lgb.refi_swap_proxy",label:"Special refinancing (swap proxy)"}]}));
   out.push(chartCard({title:"Implied central net financing", sub:"RMB bn · PBoC TSF govt-bond line – MOF local net issuance (reconciliation)", unit:"RMB bn", type:"bar", zero:true,
     series:[{id:"cgb.net_implied",label:"Implied CGB net"}]}));
@@ -425,13 +425,13 @@ function projectTypes(){
 function renderLeadLag(){
   const ll = (state.data?.analytics?.lead_lag || []);
   const out = [];
-  out.push(el("p",{class:"note"},"Each pair is tested for whether the high-frequency indicator leads the official series. A lead is claimed only if four tests all pass: the prewhitened cross-correlation is significant, it beats a block-shuffled placebo, it passes Granger causality, and the lead is not dominated by the reverse direction. Raw (non-prewhitened) correlations are shown for contrast. They are usually inflated by shared trends."));
+  out.push(el("p",{class:"note"},"Each pair is tested for whether the high-frequency indicator leads the official series. A lead is claimed only if all six tests pass: the prewhitened cross-correlation is significant; it stays significant after dropping the two months that drive it most; it beats a block-shuffled placebo; it passes a HAC Granger test; it is not dominated by the reverse direction; and the same lead holds on the sample without 2020–22. Raw (non-prewhitened) correlations are shown for contrast. They are usually inflated by shared trends."));
   if (!ll.length){ out.push(el("div",{class:"empty"},"No analytics yet: the store has no data.")); return out; }
   const sel = el("select",{"aria-label":"Indicator pair"}); ll.forEach((r,i)=>sel.append(el("option",{value:i, ...(i===state.llPair?{selected:""}:{})}, r.label)));
   sel.addEventListener("change",()=>{state.llPair=+sel.value; state.llLag=null; render();});
   out.push(el("div",{style:"margin:8px 0 12px"}, "Pair ", sel));
   const r = ll[state.llPair] || ll[0];
-  if (r.status !== "ok"){ out.push(el("div",{class:"empty"}, `${r.label}: ${r.status}` + (r.n_x!=null?` (x: ${r.n_x} obs, y: ${r.n_y} obs; need 48)`:""))); out.push(provBlock([r.x, r.y])); return out; }
+  if (r.status !== "ok"){ out.push(el("div",{class:"empty"}, `${r.label}: ${r.status}` + (r.n_x!=null?` (x: ${r.n_x} obs, y: ${r.n_y} obs; need 40)`:""))); out.push(provBlock([r.x, r.y])); return out; }
   const g = el("div",{class:"grid"});
   // CCF
   const c1 = el("div",{class:"card"}); c1.append(el("h3",{},"Cross-correlation by lag"), el("div",{class:"csub"},`corr(x(t−k), y(t)); k > 0 means ${r.x} leads. Band = ±1.96/√n`));
@@ -448,7 +448,7 @@ function renderLeadLag(){
   });
   // criteria
   const c2 = el("div",{class:"card"}); c2.append(el("h3",{},"Verdict"), el("div",{class:"csub"}, r.verdict));
-  const crit = {ccf_significant:"Prewhitened CCF outside 95% band", "placebo_p_lt_0.05":"Beats block-shuffled placebo (p < 0.05)", "granger_p_lt_0.05":"Granger causality (p < 0.05)", not_reverse_dominated:"Not dominated by reverse direction"};
+  const crit = {ccf_significant:"Prewhitened CCF outside 95% band", survives_dropping_2_most_influential:"Still significant without the 2 most influential months", "placebo_p_lt_0.05":"Beats block-shuffled placebo (p < 0.05)", "granger_p_lt_0.05":"Granger causality, HAC (p < 0.05)", not_reverse_dominated:"Not dominated by reverse direction", survives_ex_covid:"Same lead without 2020–22"};
   Object.entries(crit).forEach(([k,lab])=>{ const ok=r.criteria[k]; c2.append(el("div",{class:"check"}, el("span",{class:"status "+(ok?"PASS":"NOT_TESTABLE")}, el("i"), ok?"Met":"Not met"), " ", lab)); });
   const kv = el("div",{class:"kv",style:"margin-top:10px"});
   const add=(k,v)=>{kv.append(el("div",{},k),el("div",{},v));};

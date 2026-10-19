@@ -46,11 +46,20 @@ Stated plainly so they are not mistaken for findings.
   Chinese official host. Real data is fetched by the GitHub Action on GitHub's runners;
   `source_status.json` and the app's Data & sources tab show exactly what each build reached.
 
+- **NBS's own retail m/m SA** is parsed from release text only (5 observations). NBS now publishes
+  the series in a revision table ("修订结果及…环比数据"), which is not parsed, so the external cross-check
+  of the tracker's retail SA is thin.
+- **The debt-swap proxy overstates the swap.** All special refinancing bonds since 2024-11 count,
+  including ordinary rollover of maturing special bonds: RMB 2.8trn by September 2025 against a
+  RMB 2trn swap quota. It is therefore shown in RMB bn, never as a share of the quota.
+
 ## Method
 - **IP has no tracker seasonal adjustment** (NBS publishes no levels); NBS's own SA m/m is shown.
 - **FAI deflator:** PPI is used as a proxy for the FAI deflator.
 - **The Jan/Feb split is a convention**; January and February individually are unobservable
   for NBS activity data.
+- **Home-price chain levels across a missing month** assume no change in that month (none is
+  missing today). Months without an m/m are shown as gaps.
 - **Tier home-price aggregates are simple means of city indices,** matching NBS commentary;
   they are not transaction-weighted.
 - **GDP sector contributions are a tracker approximation:** prior-year nominal share × sector

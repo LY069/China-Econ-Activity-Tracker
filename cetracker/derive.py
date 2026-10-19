@@ -25,10 +25,17 @@ NOTES: dict[str, str] = {}
 
 # months where consecutive PBoC credit-table stocks are on different statistical scopes
 STOCK_SCOPE_BREAKS = {"2023-01-31": "PBOC_SCOPE_2023"}
+# TSF definition segments (config/breaks.yaml TSF_DEF_2017): flows are on the current definition
+# from 2017-01 (PBoC's restated block); stock tables switch definition at 2018-01 and 2019-01
+TSF_FLOW_CURRENT_DEF = pd.Timestamp("2017-01-31")
+TSF_STOCK_DEF_STARTS = ("2018-01-31", "2019-01-31")
 
 class Deriver:
     def __init__(self, obs: pd.DataFrame):
-        self.obs = store.latest(obs)
+        # derived inputs come only from this build (self.cache): reading a previous build's derived rows
+        # would make the output depend on the store's history (a derived id read before it is computed)
+        lat = store.latest(obs)
+        self.obs = lat[lat["source_tier"] != "derived"] if len(lat) else lat
         self.rows: list[pd.DataFrame] = []
         self.cache: dict[str, pd.Series] = {}
         self._vser: dict[str, pd.Series] = {}
@@ -52,10 +59,16 @@ class Deriver:
         self._vser[sid] = v
         return v
 
-    def put(self, sid: str, s: pd.Series, transform: str, inputs: list[str], flags=""):
-        """Store a derived series. Each period's vintage is the latest vintage among the inputs'
-        values at or before that period (as-of), so as_of() reconstructs what was computable on a
-        date instead of stamping the whole history with the newest release."""
+    def put(self, sid: str, s: pd.Series, transform: str, inputs: list[str], flags="", two_sided: bool = False):
+        """Store a derived series with a per-period vintage, so as_of() reconstructs what was
+        computable on a date:
+        - one-sided transforms: the latest vintage among the inputs' values at or before the period;
+          for a month an input structurally never has (January of a Jan-Feb release, split from the
+          Jan-Feb figure) the vintage of the input's next observation, which the value depends on;
+        - two-sided transforms (seasonal adjustment and anything built on it): every period takes the
+          latest input vintage, since each value is estimated on the whole sample;
+        - never earlier than the day after the period ends."""
+        from .analytics.lags import _never_observed_months
         s = s.replace([np.inf, -np.inf], np.nan).dropna()
         if s.empty:
             return
@@ -66,8 +79,19 @@ class Deriver:
             if v.empty:
                 continue
             v = v[~v.index.duplicated(keep="last")]
-            aligned = v.reindex(v.index.union(s.index)).ffill().reindex(s.index).fillna("")
+            if two_sided:
+                aligned = pd.Series(v.max(), index=s.index)
+            else:
+                u = v.reindex(v.index.union(s.index))
+                aligned = u.ffill().reindex(s.index).fillna("")
+                skip = _never_observed_months(self.get(i))
+                if skip:
+                    nxt = u.bfill().reindex(s.index)
+                    m = s.index.month.isin(list(skip)) & ~s.index.isin(v.index) & nxt.notna().values
+                    aligned = aligned.where(~m, nxt)
             per = pd.Series(np.where(aligned.values > per.values, aligned.values, per.values), index=s.index)
+        floor = pd.Series((s.index + pd.Timedelta(days=1)).strftime("%Y-%m-%d"), index=s.index)
+        per = pd.Series(np.where(per.values < floor.values, floor.values, per.values), index=s.index)
         self._vser[sid] = per
         prov = store.Provenance("tracker", "derived", vintage_date="", lineage=f"{transform}({','.join(inputs)})")
         rows = store.make_rows(sid, s, prov, flags)
@@ -115,11 +139,23 @@ class Deriver:
             NOTES[sid] = f"SA failed: {e}"
             return
         NOTES[f"{sid}~sa"] = note
-        self.put(f"{sid}~sa", prim["sa"], "x13" if note.startswith("X-13") else "stl_holiday", [sid])
-        self.put(f"{sid}~sa_mom", SA.sa_mom(prim["sa"]), "pct_change_1", [f"{sid}~sa"])
-        self.put(f"{sid}~saar3", SA.saar_3m(prim["sa"]), "saar_3m3m", [f"{sid}~sa"])
+        self.put(f"{sid}~sa", prim["sa"], "x13" if note.startswith("X-13") else "stl_holiday", [sid], two_sided=True)
+        mom, mflags = SA.sa_mom(prim["sa"]), {}
+        if janfeb:
+            # January and February are an even split of the Jan-Feb figure, so neither month's own m/m
+            # means anything: January is masked and February shows the Jan-Feb average vs December
+            sa = prim["sa"]
+            for t in mom.index[mom.index.month == 2]:
+                jan, dec = t - pd.offsets.MonthEnd(1), t - pd.offsets.MonthEnd(2)
+                if jan in sa.index and dec in sa.index:
+                    mom[t] = ((sa[jan] + sa[t]) / 2 / sa[dec] - 1) * 100
+                    mflags[t] = "janfeb_avg_vs_dec"
+            mom = mom[mom.index.month != 1]
+        self.put(f"{sid}~sa_mom", mom, "pct_change_1[Jan masked; Feb = Jan-Feb avg vs Dec]" if janfeb else "pct_change_1",
+                 [f"{sid}~sa"], mflags, two_sided=True)
+        self.put(f"{sid}~saar3", SA.saar_3m(prim["sa"]), "saar_3m3m", [f"{sid}~sa"], two_sided=True)
         if cross is not None:
-            self.put(f"{sid}~sa_stl", cross["sa"], "stl_holiday_crosscheck", [sid])
+            self.put(f"{sid}~sa_stl", cross["sa"], "stl_holiday_crosscheck", [sid], two_sided=True)
 
     def activity(self):
         for base in ("retail", "fai", "fai.re_ytd", "re.starts_ytd", "re.completions_ytd", "re.sales_ytd"):
@@ -232,23 +268,43 @@ class Deriver:
             self.put("tsf.flow_ex_govt", tot - gov.fillna(0.0), "difference[govt missing=0]",
                      ["tsf.flow", "tsf.govt_bonds"], fl[fl != ""])
         gdp_ok = self.has("gdp.nominal_q")
+
+        def current_def(sid):
+            # TSF flows before 2017 are on the pre-2018 definition (PBoC restated 2017 onward only):
+            # rolling sums and impulses use the current-definition segment (break TSF_DEF_2017)
+            f = self.get(sid)
+            return f[f.index >= TSF_FLOW_CURRENT_DEF] if sid.startswith("tsf.") else f
+
         for sid in ("tsf.flow", "tsf.flow_ex_govt", "tsf.rmb_loans", "loans.total", "tsf.govt_bonds"):
             if not self.has(sid):
                 continue
-            f12 = C.rolling12(self.get(sid))
+            f12 = C.rolling12(current_def(sid))
             self.put(f"{sid}~12m", f12, "rolling_sum_12", [sid])
             if gdp_ok:
-                self.put(f"{sid}~impulse", C.credit_impulse(self.get(sid), self.get("gdp.nominal_q")),
+                self.put(f"{sid}~impulse", C.credit_impulse(current_def(sid), self.get("gdp.nominal_q")),
                          "credit_impulse[d12(sum12)/gdp4q]", [sid, "gdp.nominal_q"])
         if self.has("tsf.stock"):
-            self.put("tsf.stock~yoy_calc", C.stock_yoy(self.get("tsf.stock")), "stock_yoy", ["tsf.stock"])
+            # stock tables are never restated: each year's table is on that year's definition (jumps at
+            # 2018-01 and 2019-01), so y/y from levels is computed only within a definition segment
+            st = self.get("tsf.stock")
+            yoy = C.stock_yoy(st)
+            cross = pd.Series(False, index=yoy.index)
+            for b in TSF_STOCK_DEF_STARTS:
+                b = pd.Timestamp(b)
+                cross |= (yoy.index >= b) & (yoy.index - pd.offsets.MonthEnd(12) < b)
+            self.put("tsf.stock~yoy_calc", yoy[~cross], "stock_yoy[within definition segment]", ["tsf.stock"])
+            # denominator: the year-ago stock on today's definition = S_t / (1 + published y/y_t), since
+            # PBoC's stock growth is on a comparable basis; levels only where no published y/y exists
+            # and both ends lie in the current-definition segment
+            base = C.comparable_base(st, self.get("tsf.stock_yoy"), TSF_STOCK_DEF_STARTS[-1])
             for sid in ("tsf.flow", "tsf.flow_ex_govt", "tsf.govt_bonds", "lgb.new_total"):
                 if self.has(sid):
-                    flow = self.get(sid)
+                    flow = current_def(sid)
                     if sid == "tsf.govt_bonds" and self.has("tsf.lg_special_bonds"):
-                        flow = flow.combine_first(self.get("tsf.lg_special_bonds"))
-                    self.put(f"{sid}~impulse_stk", C.impulse_vs_stock(flow, self.get("tsf.stock")),
-                             "impulse_vs_stock[d12(sum12)/tsf_stock_t-12]", [sid, "tsf.stock"])
+                        flow = flow.combine_first(current_def("tsf.lg_special_bonds"))
+                    self.put(f"{sid}~impulse_stk", C.impulse_vs_base(flow, base),
+                             "impulse_vs_stock[d12(sum12)/comparable tsf_stock_t-12]",
+                             [sid, "tsf.stock", "tsf.stock_yoy"])
 
     # ------------------------------------------------------------------ bonds
     def bonds(self):
@@ -258,9 +314,15 @@ class Deriver:
             rs = self.get("lgb.refi_special")
             self.put("lgb.refi_swap_proxy", rs[rs.index >= "2024-11-30"], "proxy[refi_special since 2024-11]",
                      ["lgb.refi_special"], "proxy_not_reported_by_mof")
-        if self.has("lgb.general_new", "lgb.special_new"):
-            nm = self.get("lgb.general_new").add(self.get("lgb.special_new"), fill_value=np.nan)
-            self.put("lgb.new_total", nm, "sum", ["lgb.general_new", "lgb.special_new"])
+        if self.has("lgb.general_new", "lgb.special_new") or self.has("lgb.new_total_reported"):
+            # MOF's stated new-issuance total ("发行新增债券X亿元", from 2018-10); before late 2021 the
+            # text does not split it by type, so general + special is only the fallback
+            nm = self.get("lgb.general_new").add(self.get("lgb.special_new"), fill_value=np.nan) \
+                if self.has("lgb.general_new", "lgb.special_new") else pd.Series(dtype=float)
+            rep = self.get("lgb.new_total_reported")
+            tot = rep.combine_first(nm) if len(rep) else nm
+            self.put("lgb.new_total", tot, "reported[else general+special]",
+                     ["lgb.new_total_reported", "lgb.general_new", "lgb.special_new"])
         if self.has("lgb.total", "lgb.redemption"):
             self.put("lgb.net", self.get("lgb.total") - self.get("lgb.redemption"), "difference",
                      ["lgb.total", "lgb.redemption"])
@@ -269,7 +331,7 @@ class Deriver:
             if self.has(sid):
                 self.put(f"{sid}~12m", C.rolling12(self.get(sid)), "rolling_sum_12", [sid])
                 if gdp_ok:
-                    self.put(f"{sid}~impulse", C.credit_impulse(self.get(sid), self.get("gdp.nominal_q")),
+                    self.put(f"{sid}~impulse", C.credit_impulse(current_def(sid), self.get("gdp.nominal_q")),
                              "fiscal_impulse[d12(sum12)/gdp4q]", [sid, "gdp.nominal_q"])
         if self.has("tsf.govt_bonds", "lgb.net"):
             self.put("cgb.net_implied", self.get("tsf.govt_bonds") - self.get("lgb.net"),
@@ -303,7 +365,8 @@ class Deriver:
                     self.put(f"hp.{seg}.breadth_down", H.breadth(df), "count[index<100]", ids)
 
     def run(self) -> pd.DataFrame:
-        for step in (self.gdp, self.activity, self.credit, self.bonds, self.projects, self.housing):
+        # dependency order: credit() uses lgb.new_total from bonds()
+        for step in (self.gdp, self.activity, self.bonds, self.credit, self.projects, self.housing):
             try:
                 step()
             except Exception as e:

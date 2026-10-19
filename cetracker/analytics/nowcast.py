@@ -4,7 +4,7 @@ Real-time discipline
 --------------------
 Each predictor carries a publication lag L (months): at the nowcast date for target month
 t only x_{t-L} and earlier are used. Lags (docs/methods.md, "Release calendar"):
-    bond issuance (ChinaBond / MOF daily-to-monthly)   L = 0  (month t complete at t+1 day 1)
+    MOF local-bond issuance (published ~24-31 days after t) L = 1
     PBoC credit / money (released ~10th-15th of t+1)   L = 1  (conservative: may miss t)
     NDRC approvals (press conference, t+1 mid/late)    L = 1
     NBS activity of month t (~15th-17th of t+1)        L = 1  (target's own lag)

@@ -19,7 +19,7 @@ cetracker/
                       credit impulse, bond pace vs quota, 70-city tiers
   derive.py           all derived series, with lineage
   analytics/          lead/lag tests (prewhitening, ADL-HAC, Granger, breaks, placebos),
-                      pseudo real-time nowcasts (DM tests), project-type classifier
+                      pseudo real-time nowcasts (Clark–West vs AR, DM for reference), project-type classifier
   validate/checks.py  identities, reconciliations, y/y reproduction, physical proxies
   build.py            ingest -> derive -> analytics -> validation -> site/data/*.json
 config/               break register, NPC quotas, tiers, CNY dates, six-networks dictionary

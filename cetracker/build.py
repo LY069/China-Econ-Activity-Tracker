@@ -112,8 +112,9 @@ def run_analytics(get) -> dict:
             except Exception as e:
                 ex = {"error": str(e)[:200]}
             # a robust lead must also hold without the COVID window
-            full["criteria"]["survives_ex_covid"] = bool(ex and "robust" in str(ex.get("verdict", ""))
-                                                         and "no robust" not in str(ex.get("verdict", "")))
+            full["criteria"]["survives_ex_covid"] = bool(ex and "no robust" not in str(ex.get("verdict", ""))
+                                                         and "robust" in str(ex.get("verdict", ""))
+                                                         and ex.get("best_lead") == full.get("best_lead"))
             if not all(full["criteria"].values()):
                 full["verdict"] = f"no robust lead of {x} over {y}"
             out["lead_lag"].append({**rec, "status": "ok", **full, "ex_covid": ex})
@@ -194,7 +195,9 @@ def update_nowcast_log(live: dict, get, built_at: str) -> pd.DataFrame:
 def bond_tables(get) -> dict:
     out = {}
     for sid, cat in [("lgb.special_new", "lg_special_new"), ("lgb.general_new", "lg_general_new"),
-                     ("lgb.refi_swap_proxy", "lg_refi_debt_swap"), ("lgb.refi_total", "lg_refi_total")]:
+                     # the swap proxy (all special refinancing since 2024-11) also contains ordinary rollover of
+                     # maturing special bonds, so it is shown in RMB bn, never as a share of the RMB2trn swap quota
+                     ("lgb.refi_swap_proxy", "lg_refi_swap_proxy"), ("lgb.refi_total", "lg_refi_total")]:
         s = get(sid)
         if s.empty:
             continue
@@ -290,6 +293,7 @@ def main(offline: bool = False):
 
     analytics = run_analytics(get)
     vals = checks.run(get)
+    vals.append(checks.vintage_order(lat))
     log = update_nowcast_log(analytics.get("live", {}), get, built_at)
     catalog = export_catalog(obs, derive.NOTES)
     dump("catalog.json", catalog)

@@ -50,13 +50,14 @@ def tsf_annual(get):
     # report rounds to one decimal (a value that is a multiple of RMB 100bn is treated as such)
     # The December figure is a first release; PBoC later revises annual totals slightly (2023: 35.59 trn
     # first printed, 35.58 trn implied by the 2024 report's '比上年少3.32万亿'). Beyond rounding but within
-    # 0.1% of the total is a revision (WARN); more than that is a parsing or unit error (FAIL).
+    # 0.05% of the total (about RMB 18bn) is a revision (WARN); more than that is treated as a
+    # parsing or unit error (FAIL).
     df["tol"] = [50.0 if round(v) % 100 == 0 else 10.0 for v in df["published"]]
     df["exception"] = df["diff"].abs() > df["tol"]
-    hard = (df["diff"].abs() > df["tol"] + 0.001 * df["published"].abs()).any()
+    hard = (df["diff"].abs() > df["tol"] + 0.0005 * df["published"].abs()).any()
     n = int(df["exception"].sum())
     st = "PASS" if n == 0 else ("FAIL" if hard else "WARN")
-    return _rec(cid, group, desc, st, len(df), n, "rounding (10 or 50 bn); revisions up to 0.1% of the total WARN",
+    return _rec(cid, group, desc, st, len(df), n, "rounding (10 or 50 bn); revisions up to 0.05% of the total WARN",
                 f"max |diff| {df['diff'].abs().max():.1f} bn over {len(df)} year(s)", _exc_list(df, ["computed", "published", "diff"]))
 
 
@@ -323,6 +324,17 @@ def proxy_agreement(get, target="fai.ytd~cyoy", proxies=("proxy.cement_yoy", "pr
     return out
 
 
+def vintage_order(lat: pd.DataFrame) -> dict:
+    """No value (fetched or derived) may be dated before its period has ended: such a row would
+    give as_of() look-ahead."""
+    cid, desc = "vintage:order", "Every row's vintage is after its period end (fetched and derived)"
+    bad = lat[lat["vintage_date"] <= lat["period"]]
+    ex = [{"period": p, "series_id": s, "vintage": v} for s, p, v in
+          bad[["series_id", "period", "vintage_date"]].head(50).itertuples(index=False)]
+    return _rec(cid, "Vintages", desc, "PASS" if bad.empty else "FAIL", len(lat), len(bad), "0 rows",
+                f"{len(bad)} row(s) dated on or before their period end", ex)
+
+
 def run(get) -> list[dict]:
     R = []
     R.append(identity(get, "id:hh_loan_stock", "Household loan stock = short + medium/long (PBoC credit table)",
@@ -370,7 +382,8 @@ def run(get) -> list[dict]:
                         "retail.ytd~sm", "retail.level", tol_abs=0.15))
     for sid, janfeb in (("retail.ytd", True), ("fai.ytd", True), ("ip.yoy", True), ("prices.cpi_yoy", False),
                         ("prices.ppi_yoy", False), ("fai.re_ytd", True), ("re.sales_ytd", True), ("tsf.flow", False),
-                        ("loans_stock.total", False), ("money.m2", False), ("lgb.total", False)):
+                        ("loans_stock.total", False), ("money.m2", False), ("lgb.total", False),
+                        ("fai.infra_ytd_yoy", True), ("fai.mfg_ytd_yoy", True)):
         R.append(coverage(get, sid, janfeb))
     R.extend(plausibility(get))
     R.append(yoy_reproduction(get, "retail.ytd", "retail.ytd_yoy", "retail.yoy"))

@@ -58,13 +58,24 @@ jobs:
           PY
       - name: Commit data
         if: always()
+        env:
+          JOB_OK: ${{ job.status == 'success' }}
         run: |
           git config user.name "tracker-bot"
           git config user.email "tracker-bot@users.noreply.github.com"
-          git add data/ site/ docs/validation_report.md
+          if [ "$JOB_OK" = "true" ]; then
+            git add data/ site/ docs/validation_report.md
+          else
+            # a failed build (FAIL check, crash) keeps only the raw archive: the store and the app data
+            # stay at the last good build, and the fetched bytes remain available for --replay
+            echo "::warning::build failed; committing the raw archive only"
+            git add data/raw/
+          fi
           # [skip ci] stops the data commit from re-triggering this workflow
           git diff --cached --quiet && exit 0
           git commit -m "Data refresh $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
+          # drop what was not committed (a failed build's store and app data) so the rebase can run
+          git reset -q --hard HEAD && git clean -fdq
           # rebase onto anything pushed while the build ran (code pushes, other runs), then push
           for i in 1 2 3 4; do
             git fetch -q origin "${GITHUB_REF_NAME}"

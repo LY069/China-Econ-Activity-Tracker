@@ -219,15 +219,25 @@ first fetch.
 ### 3.1 Lead/lag tests (`analytics/lags.py`)
 For each pair (high-frequency x, official y):
 1. **Alignment:** both series sit on a full monthly index; missing months, such as January for
-   NBS Jan–Feb releases, stay missing. No month is filled. Lags and differences are time-based,
-   and correlations use pairwise-complete months, so nothing is paired with the wrong month and no
-   two-month change is treated as one month. The test runs only with ≥ 36 jointly observed months.
+   NBS Jan–Feb releases, stay missing. No month is filled. Differences, the indicator's lags and
+   the cross-correlations are calendar-time based and use pairwise-complete months, so nothing is
+   paired with the wrong month and no two-month change is treated as one month. The exception is
+   the target's own lags (in the prewhitening filter and the ADL's autoregressive terms). For a
+   target that never has a given calendar month (January; also February once differenced), these
+   step over that month, so February's lag-1 is December. Otherwise every own lag reaching back
+   over a January is missing and the regression sample collapses (n fell to about 30 for IP).
+   Consequences: x and y are filtered with the same AR coefficients but on different calendars
+   around January–February. The ADL treats February-to-December as one own lag. A simulation
+   by the round-2 reviewer (independent AR(1) x, January-less y, 400 runs) gave a 6.5% size at a
+   fixed lag, so the null is approximately preserved. The test runs only with ≥ 36 jointly
+   observed months.
 2. **Stationarity:** ADF and KPSS; a series failing either test is first-differenced.
 3. **Prewhitening:** fit AR(p) to x (AIC, p ≤ 12), filter both series with it, then
    cross-correlate the residuals. The 95% band is ±1.96/√n.
 4. **ADL:** BIC lag selection on a single common sample, then Newey–West HAC errors. Reports
    Σ x-coefficients with its p-value and the long-run multiplier.
-5. **Granger F-test** of the x lags, on the same rows as the ADL.
+5. **Granger test:** a HAC Wald test that all x lags are zero, on the ADL rows. This is the
+   criterion. The homoskedastic F p-value is also reported.
 6. **Rolling 36-month prewhitened correlation**, to check stability.
 7. **Breaks:**
    - Chow tests at register dates.
@@ -250,11 +260,18 @@ For each pair (high-frequency x, official y):
 
 Otherwise the app says "no robust lead" and still shows the evidence.
 
-Criteria 2 and 6 were added after the first real-data run. "M1–M2 gap leads IP by 3 months" passed
-the original four (r = 0.61, placebo p = 0.002, Granger p < 0.001). However, two pairs carried it:
-April–May 2022 IP (the Shanghai lockdown) lined up with the January–February 2022 swing in the
-gap, which is a Lunar New Year effect in unadjusted M1. Without those two pairs r = 0.33. The ADL
-coefficients net to zero (long-run multiplier −0.01, p = 0.95), and the result fails outside COVID.
+Criteria 2 and 6 were added after seeing a real-data result, which is disclosed here.
+"M1–M2 gap leads IP by 3 months" passed the original four tests (r = 0.61, placebo p = 0.002,
+Granger p < 0.001). Two observations dominate it: April–May 2022 IP (the Shanghai lockdown) lines
+up with the January–February 2022 swing in the gap, which is a Lunar New Year effect in unadjusted
+M1. Without those two pairs, r falls to 0.33. That is still just outside the 0.28 band, so
+criterion 2 alone does not reject it. The ADL coefficients net to zero (long-run multiplier
+−0.01, p = 0.95), so any effect is a short-lived timing pattern, not a cumulative one.
+
+What rejects the claim is instability across samples (criterion 6). On the sample without
+2020–22, the best lead moves to 10 months with the opposite sign (r = −0.43; placebo p = 0.18).
+The verdict is "no robust lead". The reason is that the relationship is not stable, not merely
+that two months drive it.
 
 **Inference uses unsmoothed series.** In testing, running these tests on a 3-month moving
 average shifted the estimated lead (a planted 3-month lead was estimated at 6 months), because
@@ -306,7 +323,7 @@ prewhitening an MA-smoothed series is imperfect. Smoothed series are display-onl
     differences are therefore revisions, and are logged as WARN.
   - TSF annual total: the sum of the table's 12 monthly flows must equal the full-year figure in
     the December release, within half its printed precision (RMB 10bn, or 50bn when printed to
-    0.1 trillion). A gap beyond rounding but within 0.1% of the total is PBoC's later revision of
+    0.1 trillion). A gap beyond rounding but within 0.05% of the total (about RMB 18bn) is PBoC's later revision of
     the annual figure, logged as WARN. For example, 2023 was first printed as 35.59 trillion, while the
     2024 report's "比上年少3.32万亿" implies 35.58 trillion, the table's figure. A larger gap is a FAIL.
   - TSF government bonds − MOF local net vs NPC central quotas.

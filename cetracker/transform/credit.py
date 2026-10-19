@@ -38,7 +38,10 @@ def gdp_4q_monthly(gdp_q_nominal: pd.Series, months: pd.DatetimeIndex) -> pd.Ser
     s4 = q.rolling(4, min_periods=4).sum().dropna()
     avail = s4.copy()
     avail.index = avail.index + pd.offsets.MonthEnd(GDP_PUBLICATION_LAG_MONTHS)
-    return avail.reindex(avail.index.union(months)).ffill().reindex(months)
+    # a quarter's 4Q sum stays current until the next quarter is due (3 months); after that the
+    # denominator is missing, not stale
+    full = pd.date_range(min(avail.index.min(), months.min()), max(avail.index.max(), months.max()), freq="ME")
+    return avail.reindex(full).ffill(limit=2).reindex(months)
 
 
 def credit_impulse(flow: pd.Series, gdp_q_nominal: pd.Series) -> pd.Series:
@@ -59,6 +62,27 @@ def impulse_vs_stock(flow: pd.Series, stock: pd.Series) -> pd.Series:
     lag.index = lag.index + pd.offsets.MonthEnd(12)
     idx = f12.index.intersection(lag.index)
     return ((f12[idx] - f12.shift(12)[idx]) / lag[idx] * 100).dropna().rename("impulse_vs_stock")
+
+
+def comparable_base(stock: pd.Series, stock_yoy: pd.Series, current_def_start: str) -> pd.Series:
+    """Year-ago stock on the current definition, indexed at t: S_t / (1 + g_t/100) where PBoC's
+    comparable-basis y/y g_t is published; otherwise S_{t-12} if t-12 is in the current-definition
+    segment; otherwise missing."""
+    s = _me(stock)
+    g = _me(stock_yoy) if len(stock_yoy) else pd.Series(dtype=float)
+    from_g = (s / (1 + g.reindex(s.index) / 100)).dropna()
+    lag = s.copy()
+    lag.index = lag.index + pd.offsets.MonthEnd(12)
+    lag = lag[lag.index - pd.offsets.MonthEnd(12) >= pd.Timestamp(current_def_start)]
+    return from_g.combine_first(lag).sort_index()
+
+
+def impulse_vs_base(flow: pd.Series, base: pd.Series) -> pd.Series:
+    """(F12_t - F12_{t-12}) / base_t * 100, base_t = comparable year-ago TSF stock."""
+    f12 = rolling12(flow)
+    b = _me(base)
+    idx = f12.index.intersection(b.index)
+    return ((f12[idx] - f12.shift(12)[idx]) / b[idx] * 100).dropna().rename("impulse_vs_stock")
 
 
 def flow_from_stock(stock: pd.Series) -> pd.Series:

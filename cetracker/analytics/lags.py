@@ -9,6 +9,7 @@ Pipeline for a pair (x = candidate leading indicator, y = official target):
 
 1. Stationarity: ADF + KPSS on the observed values; if either says non-stationary the series
    is differenced month-on-month (a difference exists only where both months are observed).
+   x lags and the CCF are calendar-time based; y's own lags use y's own calendar (below).
 2. Prewhitening: AR(p) for x by OLS on lagged values (p by AIC on a common sample, max 12);
    both x and y are filtered with the same AR polynomial; residuals are cross-correlated
    using all months where both are observed (pairwise).
@@ -18,7 +19,8 @@ Pipeline for a pair (x = candidate leading indicator, y = official target):
    January is missing and the regression sample collapses; x lags stay calendar months.
 3. ADL: y_t = a + sum_{i=1..p} b_i y_{t-i} + sum_{j=1..q} c_j x_{t-j}; (p, q) by BIC on a
    single common sample; HAC (Newey-West) standard errors; sum(c) and its p-value.
-4. Granger: F-test of the x lags in the ADL design (restricted = own lags only, same rows).
+4. Granger: HAC (Newey-West) Wald test that all x lags are zero, on the ADL rows. The OLS F
+   (restricted = own lags only, same rows) is also reported.
 5. Rolling 36-month prewhitened correlation at the best lead (min 24 pairs per window).
 6. Breaks: Chow F at register dates inside the sample; Quandt-Andrews sup-F with a fixed-
    regressor bootstrap p-value (Hansen 2000) on the ADL rows.
@@ -290,9 +292,12 @@ def influence_check(xw: pd.Series, yw: pd.Series, lag: int, drop: int = 2) -> di
     if len(m) < 12:
         return {"significant": False, "corr": None, "dropped": []}
     z = (m - m.mean()) / m.std()
-    c = (z["x"] * z["y"]).abs().sort_values(ascending=False)
+    r0 = m.corr().iloc[0, 1]
+    # drop the pairs that contribute most in the direction of the correlation (sign-aware), so
+    # removing opposing pairs cannot make the check easier to pass
+    c = (np.sign(r0) * z["x"] * z["y"]).sort_values(ascending=False)
     keep = m.loc[c.index[drop:]]
-    r0, r = m.corr().iloc[0, 1], keep.corr().iloc[0, 1]
+    r = keep.corr().iloc[0, 1]
     ok = bool(np.sign(r) == np.sign(r0) and abs(r) > 1.96 / np.sqrt(len(keep)))
     return {"significant": ok, "corr": float(r), "dropped": [str(t.date()) for t in c.index[:drop]]}
 
@@ -317,7 +322,9 @@ def lead_lag(x: pd.Series, y: pd.Series, xname: str, yname: str, max_lag: int = 
     band_k = 1.96 / np.sqrt(max(int(npairs[best]), 1)) if best is not None else band
     plac = block_placebo(xw, yw, max_lag, float(pos.max()), n_boot=n_boot) if best is not None else None
     ad = adl(d["x"], d["y"])
-    gr = ad.get("granger_p") if ad else None
+    # Granger criterion: HAC Wald test of the x lags (autocorrelated y/y targets); the homoskedastic
+    # F p-value is kept in the ADL record as granger_p
+    gr = ad.get("joint_x_p") if ad else None
     roll = rolling_corr(xw, yw, best or 1)
     brk = {}
     if ad:

@@ -381,11 +381,13 @@ def title_period(title: str, url_date: str, text: str = "") -> pd.Timestamp | No
         if ph in title and not re.search(r"\d{1,2}月", title):
             if not y and text:
                 t = re.sub(r"\s+", "", text)
+                # the release-date line first: a '20XX年一季度' phrase in the body can be a comparison year
+                rd = re.search(r"[（(](20\d\d)年(\d{1,2})月\d{1,2}日[）)]", t)
+                if rd:
+                    return _month_end(int(rd.group(1)) - (1 if mth == 12 else 0), mth)
                 y = re.search(r"(20\d\d)年" + ph, t)
-                if not y:
-                    rd = re.search(r"[（(](20\d\d)年(\d{1,2})月\d{1,2}日[）)]", t)   # release-date line
-                    if rd:
-                        return _month_end(int(rd.group(1)) - (1 if mth == 12 else 0), mth)
+            if not y and ud is not None and url_date in NBS_MIGRATION_DATES:
+                return None                       # a re-dated archive page: the URL year is not the release year
             year = int(y.group(1)) if y else (ud.year - 1 if (ud is not None and mth == 12) else ud.year if ud is not None else None)
             return _month_end(year, mth) if year else None
     ms = re.findall(r"(\d{1,2})月", title)
@@ -397,6 +399,10 @@ def title_period(title: str, url_date: str, text: str = "") -> pd.Timestamp | No
 
 
 ARCHIVE_GAP_DAYS = 75
+# URL dates stamped on re-dated archive pages in NBS's 2023 site migration (not publication dates)
+NBS_MIGRATION_DATES = {"2023-02-03"}
+# single-month NBS series whose February observation is the Jan-Feb figure
+JANFEB_SINGLE_MONTH = {"retail.level", "retail.yoy", "ip.yoy"}
 NBS_TYPICAL_LAG_DAYS = 17
 
 
@@ -406,7 +412,7 @@ def release_vintage(per: pd.Timestamp, url_date: str, retrieved_at: str) -> tupl
     estimated as period end + the typical NBS release lag and flagged."""
     if url_date:
         ud = pd.Timestamp(url_date)
-        if (ud - per).days <= ARCHIVE_GAP_DAYS:
+        if url_date not in NBS_MIGRATION_DATES and (ud - per).days <= ARCHIVE_GAP_DAYS:
             return url_date, ""
         return (per + pd.Timedelta(days=NBS_TYPICAL_LAG_DAYS)).strftime("%Y-%m-%d"), "vintage_estimated_archive"
     return retrieved_at[:10], "vintage_from_retrieval"
@@ -430,6 +436,9 @@ def ingest_nbs_release_texts(pages: int = 70) -> pd.DataFrame:
                 continue
             html = content.decode("utf-8", errors="replace")
             per = title_period(item["title"], item["date"], _text(html))
+            if per is None:
+                item_errors.append(f"{item['url']}: no reference period")
+                continue
             vint, vflag = release_vintage(per, item["date"], ts)
             prov = store.Provenance("NBS", "primary", item["url"], raw, ts, vint, lineage=f"release_text:{kind}")
             try:
@@ -438,7 +447,10 @@ def ingest_nbs_release_texts(pages: int = 70) -> pd.DataFrame:
                 item_errors.append(f"{item['url']}: parse {type(e).__name__}: {str(e)[:120]}")
                 continue
             for sid, (p, v) in vals.items():
-                rows.append(store.make_rows(sid, pd.Series([v], index=[p]), prov, vflag))
+                fl = vflag
+                if sid in JANFEB_SINGLE_MONTH and p.month == 2:
+                    fl = ",".join(x for x in (vflag, "janfeb_combined") if x)
+                rows.append(store.make_rows(sid, pd.Series([v], index=[p]), prov, fl))
             counts[kind] += 1
         # tier figures published in the urban-department interpretation (validation target)
         for item in crawl("NBS", "https://www.stats.gov.cn/sj/sjjd/", r"商品住宅销售价格变动情况", pages=pages):

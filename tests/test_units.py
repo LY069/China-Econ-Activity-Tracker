@@ -285,3 +285,19 @@ def test_blocks_to_monthly_february_from_january_month_block():
     out = _blocks_to_monthly(recs, ["tsf_flow"])["tsf_flow"]
     feb = [o for o in out if o[0] == pd.Timestamp("2025-02-28")][0]
     assert feb[1] == 22300.0 and feb[6] == "from_ytd_diff"
+
+
+def test_comparable_base_and_gdp_fill_cap():
+    from cetracker.transform import credit as C
+    idx = pd.date_range("2017-01-31", "2020-12-31", freq="ME")
+    st = pd.Series(np.linspace(100, 200, len(idx)), idx)
+    st[st.index >= "2019-01-31"] += 30                     # definition jump, as in the 2019 table
+    g = pd.Series(10.0, index=idx[idx >= "2018-01-31"])
+    b = C.comparable_base(st, g, "2019-01-31")
+    t = pd.Timestamp("2019-06-30")
+    assert abs(b[t] - st[t] / 1.1) < 1e-9                 # from published y/y, not the old-definition level
+    assert pd.Timestamp("2017-06-30") not in b.index
+    q = pd.Series([10.0, 10, 10, 10], pd.date_range("2023-03-31", periods=4, freq="QE"))
+    m = C.gdp_4q_monthly(q, pd.date_range("2024-01-31", "2024-06-30", freq="ME"))
+    assert m[pd.Timestamp("2024-01-31")] == 40 and m[pd.Timestamp("2024-03-31")] == 40
+    assert np.isnan(m[pd.Timestamp("2024-04-31".replace("31", "30"))])

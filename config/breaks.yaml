@@ -1,6 +1,12 @@
 # Structural-break register. Each entry is annotated on every chart of the affected series
 # and is used by analytics (break dummies / sample splits). `verify` lists what must be
 # checked against the primary source on first fetch; `status` records whether it was.
+- id: TSF_DEF_2017
+  date: "2017-01-31"
+  series: [tsf.*]
+  what: "Splice in the PBoC tables. Flows from 2017-01 come from PBoC's restated block on the current definition; flows to 2016 are on the old one (no government bonds, ABS or write-offs): 2016 sums to RMB 17.8trn, 2017 to 26.2trn. Stock tables are never restated: each year's table is on that year's definition, so stocks jump at 2018-01 (+11trn) and 2019-01 (+31trn)."
+  treatment: "Rolling sums and impulses use flows from 2017-01 only. The impulse denominator is the comparable year-ago stock, S_t / (1 + published y/y), and stock y/y from levels is computed only within a definition segment."
+  status: verified (annual flow sums; stock-table jumps at 2018-01 and 2019-01; recon:tsf_stock_yoy gaps of 3.7-14.5pp in 2018-19 from cross-segment levels)
 - id: TSF_2018_ABS_WRITEOFF
   date: 2018-07-31
   series: [tsf.*]
