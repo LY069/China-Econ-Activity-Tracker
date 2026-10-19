@@ -22,7 +22,7 @@ summary = {}
 
 def get(name, url, ext="html"):
     try:
-        r = S.get(url, timeout=40)
+        r = S.get(url, timeout=60)
         (OUT / f"{name}.{ext}").write_bytes(r.content[:4_000_000])
         summary[name] = {"status": r.status_code, "bytes": len(r.content), "url": r.url,
                          "ctype": r.headers.get("Content-Type", "")}
@@ -63,8 +63,13 @@ for yr, base in [("2025", "/diaochatongjisi/116219/116319/5570903/"), ("2016", "
 lo, hi = 50, 150
 while hi - lo > 1:
     mid = (lo + hi) // 2
-    r = S.get(f"https://www.stats.gov.cn/sj/zxfb/index_{mid}.html", timeout=30)
-    lo, hi = (mid, hi) if r.status_code == 200 else (lo, mid)
+    try:
+        code = S.get(f"https://www.stats.gov.cn/sj/zxfb/index_{mid}.html", timeout=60).status_code
+    except Exception:
+        code = None
+    if code is None:
+        break
+    lo, hi = (mid, hi) if code == 200 else (lo, mid)
 summary["nbs_zxfb_last_page"] = lo
 r = get("nbs_list_last", f"https://www.stats.gov.cn/sj/zxfb/index_{lo}.html")
 summary["nbs_list_last_titles"] = [t for t, u in links(r) if re.search(r"20\d\d年", t)][:20]
@@ -74,7 +79,7 @@ want = {"retail": "社会消费品零售总额", "ip": "规模以上工业增加
 got = {}
 for n in range(0, 8):
     url = "https://www.stats.gov.cn/sj/zxfb/" + ("" if n == 0 else f"index_{n}.html")
-    for t, u in links(S.get(url, timeout=30) and get(f"nbs_list_p{n}", url)):
+    for t, u in links(get(f"nbs_list_p{n}", url)):
         for k, pat in want.items():
             if k not in got and re.search(pat, t):
                 got[k] = (t, u)
