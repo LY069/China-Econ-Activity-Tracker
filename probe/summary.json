@@ -1,170 +1,994 @@
 {
- "nbs_query_plain": {
-  "status": 403,
-  "bytes": 293,
-  "url": "https://data.stats.gov.cn/easyquery.htm?m=QueryData&dbcode=hgyd&rowcode=zb&colcode=sj&wds=%5B%5D&dfwds=%5B%7B%22wdcode%22%3A+%22zb%22%2C+%22valuecode%22%3A+%22A0701%22%7D%2C+%7B%22wdcode%22%3A+%22sj%22%2C+%22valuecode%22%3A+%22LAST13%22%7D%5D",
-  "ctype": "text/html; charset=utf-8",
-  "set_cookie": ""
- },
- "nbs_landing": {
-  "status": 403,
-  "bytes": 293,
-  "url": "https://data.stats.gov.cn/easyquery.htm?cn=A01",
-  "ctype": "text/html; charset=utf-8",
-  "set_cookie": ""
- },
- "nbs_query_warm": {
-  "status": 403,
-  "bytes": 293,
-  "url": "https://data.stats.gov.cn/easyquery.htm?m=QueryData&dbcode=hgyd&rowcode=zb&colcode=sj&wds=%5B%5D&dfwds=%5B%7B%22wdcode%22%3A+%22zb%22%2C+%22valuecode%22%3A+%22A0701%22%7D%2C+%7B%22wdcode%22%3A+%22sj%22%2C+%22valuecode%22%3A+%22LAST13%22%7D%5D&k1=1792374956294&h=1",
-  "ctype": "text/html; charset=utf-8",
-  "set_cookie": ""
- },
- "nbs_tree_warm": {
-  "status": 403,
-  "bytes": 293,
-  "url": "https://data.stats.gov.cn/easyquery.htm",
-  "ctype": "text/html; charset=utf-8",
-  "set_cookie": ""
- },
- "nbs_new_api": {
-  "status": 404,
-  "bytes": 546,
-  "url": "https://data.stats.gov.cn/dg/website/publicrelease/web/external/getEsDataByCidAndDt",
-  "ctype": "text/html",
-  "set_cookie": ""
- },
- "nbs_list_50": {
+ "pboc_2025_money": {
   "status": 200,
-  "bytes": 73129,
-  "url": "https://www.stats.gov.cn/sj/zxfb/index_50.html",
-  "ctype": "text/html",
-  "set_cookie": ""
+  "bytes": 31447,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570886/index.html",
+  "ctype": "text/html"
  },
- "nbs_list_150": {
-  "status": 404,
-  "bytes": 555,
-  "url": "https://www.stats.gov.cn/sj/zxfb/index_150.html",
-  "ctype": "text/html",
-  "set_cookie": ""
+ "pboc_2025_money_links": [
+  [
+   "无障碍浏览",
+   "https://www.pbc.gov.cn/AiWza/index.html#/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html"
+  ],
+  [
+   "2025年统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/index.html"
+  ],
+  [
+   "货币统计概览",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570886/index.html"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026010715590077987.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026010716553788619.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026010716555338027.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582620291.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517172579562.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517172569654.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582667667.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517172510092.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517172549757.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582689608.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517172597377.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517172528299.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582640595.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517191991857.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517191958393.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582626766.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517191967752.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517191997661.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026013015572983846.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026013017292922722.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026013017292935122.pdf"
+  ],
+  [
+   "01",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130572525.xls"
+  ],
+  [
+   "02",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130534562.xls"
+  ],
+  [
+   "03",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130553609.xls"
+  ],
+  [
+   "04",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130577379.xls"
+  ],
+  [
+   "05",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130564631.xls"
+  ],
+  [
+   "06",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130551053.xls"
+  ],
+  [
+   "07",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130594317.xls"
+  ],
+  [
+   "08",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130545438.xls"
+  ],
+  [
+   "09",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025110411130577871.xls"
+  ],
+  [
+   "10",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/12/2025123116011024391.xls"
+  ],
+  [
+   "11",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/12/2025123116011049155.xls"
+  ],
+  [
+   "12",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026013015574633550.xls"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026013016010678552.xls"
+  ],
+  [
+   "法律声明",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570886/index.html"
+  ],
+  [
+   "设为首页",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570886/index.html"
+  ],
+  [
+   "加入收藏",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570886/index.html"
+  ]
+ ],
+ "pboc_2025_credit": {
+  "status": 200,
+  "bytes": 31325,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570888/index.html",
+  "ctype": "text/html"
  },
- "nbs_list_300": {
-  "status": 404,
-  "bytes": 555,
-  "url": "https://www.stats.gov.cn/sj/zxfb/index_300.html",
-  "ctype": "text/html",
-  "set_cookie": ""
+ "pboc_2025_credit_links": [
+  [
+   "无障碍浏览",
+   "https://www.pbc.gov.cn/AiWza/index.html#/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html"
+  ],
+  [
+   "2025年统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/index.html"
+  ],
+  [
+   "金融机构信贷收支统计",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570888/index.html"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516024288235.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517343692992.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517344571507.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516032041572.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517335615230.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517340561793.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516034915919.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517331560000.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517332493273.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516045792644.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517322722170.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517323867558.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516053141218.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517314370061.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517315241712.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516060366702.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517305021375.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517310594983.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516063437392.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517300310838.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517301241184.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516074575038.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517291956784.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517292870384.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516081797196.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517281794932.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517283815865.pdf"
+  ],
+  [
+   "法律声明",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570888/index.html"
+  ],
+  [
+   "设为首页",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570888/index.html"
+  ],
+  [
+   "加入收藏",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570888/index.html"
+  ]
+ ],
+ "pboc_2025_credit_tbl0": {
+  "status": 200,
+  "bytes": 31325,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570888/index.html",
+  "ctype": "text/html"
  },
- "nbs_list_500": {
-  "status": 404,
-  "bytes": 555,
-  "url": "https://www.stats.gov.cn/sj/zxfb/index_500.html",
-  "ctype": "text/html",
-  "set_cookie": ""
+ "pboc_2025_credit_tbl0_att": [
+  "金融机构信贷收支统计",
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516024288235.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517343692992.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517344571507.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516032041572.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517335615230.xlsx"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517340561793.pdf"
+  ]
+ ],
+ "pboc_2025_credit_tbl0_att0": {
+  "status": 200,
+  "bytes": 76179,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516024288235.htm",
+  "ctype": "text/html"
+ },
+ "pboc_2025_credit_tbl0_att1": {
+  "status": 200,
+  "bytes": 17713,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517343692992.xlsx",
+  "ctype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+ },
+ "pboc_2025_credit_tbl0_att2": {
+  "status": 200,
+  "bytes": 154361,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011517344571507.pdf",
+  "ctype": "application/pdf"
+ },
+ "pboc_2016_money": {
+  "status": 200,
+  "bytes": 32138,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013641/index.html",
+  "ctype": "text/html"
+ },
+ "pboc_2016_money_links": [
+  [
+   "无障碍浏览",
+   "https://www.pbc.gov.cn/AiWza/index.html#/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html"
+  ],
+  [
+   "2016年统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/index.html"
+  ],
+  [
+   "货币统计概览",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013641/index.html"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017010710465834913.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011016091513307.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011016091552688.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011616170598114.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011815321453174.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011815321466561.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2023/02/2023022414304748372.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2023/02/2023022414304755177.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2023/02/2023022414304773748.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2023/02/2023022414304778532.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2023/02/2023022414304717587.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2023/02/2023022414304797215.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011618241733781.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011815321433867.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011815321483353.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011809494096871.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011816584561179.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011816584588958.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011811042398815.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011815402567697.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017011815402417897.pdf"
+  ],
+  [
+   "01",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/02/2016022915525024242.xls"
+  ],
+  [
+   "02",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/03/2016033116401144806.xls"
+  ],
+  [
+   "03",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/04/2016043010041836606.xls"
+  ],
+  [
+   "04",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/05/2016053115545088379.xls"
+  ],
+  [
+   "05",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/06/2016063016021288476.xls"
+  ],
+  [
+   "06",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/07/2016072916141192820.xls"
+  ],
+  [
+   "07",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/08/2016083116331392421.xls"
+  ],
+  [
+   "08",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/09/2016093016123377381.xls"
+  ],
+  [
+   "09",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/10/2016103116293931654.xls"
+  ],
+  [
+   "10",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/11/2016113018384785953.xls"
+  ],
+  [
+   "11",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2016/12/2016123015570437590.xls"
+  ],
+  [
+   "12",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2019/07/2019073115582151654.xls"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2017/01/2017012414334457169.xls"
+  ],
+  [
+   "法律声明",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013641/index.html"
+  ],
+  [
+   "设为首页",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013641/index.html"
+  ],
+  [
+   "加入收藏",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013641/index.html"
+  ]
+ ],
+ "pboc_2016_credit": {
+  "status": 200,
+  "bytes": 31250,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013643/index.html",
+  "ctype": "text/html"
+ },
+ "pboc_2016_credit_links": [
+  [
+   "无障碍浏览",
+   "https://www.pbc.gov.cn/AiWza/index.html#/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "调查统计司",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/index.html"
+  ],
+  [
+   "统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html"
+  ],
+  [
+   "2016年统计数据",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/index.html"
+  ],
+  [
+   "金融机构信贷收支统计",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013643/index.html"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811174754177.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811172557369.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811175624088.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811185552239.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811184444137.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811190550323.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811194742476.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811193826854.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811195863711.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811203352117.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811202210604.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811210414495.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811261149897.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811260014568.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811261927511.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811272516817.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811270888037.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811273773571.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811282876418.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811281875044.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811283887134.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811291951768.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811290712600.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811293072107.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811303119728.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811301155941.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811304320257.pdf"
+  ],
+  [
+   "法律声明",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013643/index.html"
+  ],
+  [
+   "设为首页",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013643/index.html"
+  ],
+  [
+   "加入收藏",
+   "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013643/index.html"
+  ]
+ ],
+ "pboc_2016_credit_tbl0": {
+  "status": 200,
+  "bytes": 31250,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013643/index.html",
+  "ctype": "text/html"
+ },
+ "pboc_2016_credit_tbl0_att": [
+  "金融机构信贷收支统计",
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811174754177.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811172557369.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811175624088.pdf"
+  ],
+  [
+   "htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811185552239.htm"
+  ],
+  [
+   "xls",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811184444137.xls"
+  ],
+  [
+   "pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811190550323.pdf"
+  ]
+ ],
+ "pboc_2016_credit_tbl0_att0": {
+  "status": 200,
+  "bytes": 114084,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811174754177.htm",
+  "ctype": "text/html"
+ },
+ "pboc_2016_credit_tbl0_att1": {
+  "status": 200,
+  "bytes": 40448,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811172557369.xls",
+  "ctype": "application/vnd.ms-excel"
+ },
+ "pboc_2016_credit_tbl0_att2": {
+  "status": 200,
+  "bytes": 173511,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811175624088.pdf",
+  "ctype": "application/pdf"
+ },
+ "nbs_zxfb_last_page": 66,
+ "nbs_list_last": {
+  "status": 200,
+  "bytes": 69044,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_66.html",
+  "ctype": "text/html"
+ },
+ "nbs_list_last_titles": [
+  "2021年11月中旬流通领域重要生产资料市场价格变动情况",
+  "2021年11月中旬流通领域重要生产资料市场价格变动情况",
+  "2021年11月中旬流通领域重要生产资料市场价格变动情况",
+  "2021年10月份规模以上工业增加值增长3.5%",
+  "2021年10月份规模以上工业增加值增长3.5%",
+  "2021年10月份规模以上工业增加值增长3.5%",
+  "2021年1—10月份全国固定资产投资（不含农户）增长6.1%",
+  "2021年1—10月份全国固定资产投资（不含农户）增长6.1%",
+  "2021年1—10月份全国固定资产投资（不含农户）增长6.1%",
+  "2021年1—10月份全国房地产开发投资增长7.2%",
+  "2021年1—10月份全国房地产开发投资增长7.2%",
+  "2021年1—10月份全国房地产开发投资增长7.2%",
+  "2021年10月份社会消费品零售总额增长4.9%",
+  "2021年10月份社会消费品零售总额增长4.9%",
+  "2021年10月份社会消费品零售总额增长4.9%",
+  "2021年10月份能源生产情况",
+  "2021年10月份能源生产情况",
+  "2021年10月份能源生产情况",
+  "2021年11月上旬流通领域重要生产资料市场价格变动情况",
+  "2021年11月上旬流通领域重要生产资料市场价格变动情况"
+ ],
+ "nbs_list_p0": {
+  "status": 200,
+  "bytes": 72939,
+  "url": "https://www.stats.gov.cn/sj/zxfb/",
+  "ctype": "text/html"
+ },
+ "nbs_list_p1": {
+  "status": 200,
+  "bytes": 73025,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_1.html",
+  "ctype": "text/html"
+ },
+ "nbs_list_p2": {
+  "status": 200,
+  "bytes": 73440,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_2.html",
+  "ctype": "text/html"
+ },
+ "nbs_list_p3": {
+  "status": 200,
+  "bytes": 73089,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_3.html",
+  "ctype": "text/html"
+ },
+ "nbs_list_p4": {
+  "status": 200,
+  "bytes": 73043,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_4.html",
+  "ctype": "text/html"
+ },
+ "nbs_list_p5": {
+  "status": 200,
+  "bytes": 73018,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_5.html",
+  "ctype": "text/html"
+ },
+ "nbs_list_p6": {
+  "status": 200,
+  "bytes": 72952,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_6.html",
+  "ctype": "text/html"
+ },
+ "nbs_list_p7": {
+  "status": 200,
+  "bytes": 73089,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_7.html",
+  "ctype": "text/html"
+ },
+ "nbs_samples": {
+  "ip": [
+   "2026年9月份规模以上工业增加值增长5.5%",
+   "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965617.html"
+  ],
+  "property": [
+   "2026年1—9月份全国房地产市场基本情况",
+   "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965615.html"
+  ],
+  "retail": [
+   "2026年1—9月份社会消费品零售总额增长1.1%",
+   "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965614.html"
+  ],
+  "energy": [
+   "2026年9月份能源生产情况",
+   "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965613.html"
+  ],
+  "cpi": [
+   "2026年9月份居民消费价格同比上涨0.9%",
+   "https://www.stats.gov.cn/sj/zxfb/202610/t20261014_1965477.html"
+  ],
+  "ppi": [
+   "2026年9月份工业生产者出厂价格同比上涨5.0% 环比上涨1.2%",
+   "https://www.stats.gov.cn/sj/zxfb/202610/t20261014_1965476.html"
+  ],
+  "gdp": [
+   "1—7月份国民经济保持总体平稳、向新向优发展态势",
+   "https://www.stats.gov.cn/sj/zxfb/202608/t20260817_1965056.html"
+  ]
+ },
+ "nbs_sample_ip": {
+  "status": 200,
+  "bytes": 402595,
+  "url": "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965617.html",
+  "ctype": "text/html"
+ },
+ "nbs_sample_property": {
+  "status": 200,
+  "bytes": 250665,
+  "url": "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965615.html",
+  "ctype": "text/html"
+ },
+ "nbs_sample_retail": {
+  "status": 200,
+  "bytes": 246685,
+  "url": "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965614.html",
+  "ctype": "text/html"
+ },
+ "nbs_sample_energy": {
+  "status": 200,
+  "bytes": 96870,
+  "url": "https://www.stats.gov.cn/sj/zxfb/202610/t20261019_1965613.html",
+  "ctype": "text/html"
+ },
+ "nbs_sample_cpi": {
+  "status": 200,
+  "bytes": 245756,
+  "url": "https://www.stats.gov.cn/sj/zxfb/202610/t20261014_1965477.html",
+  "ctype": "text/html"
+ },
+ "nbs_sample_ppi": {
+  "status": 200,
+  "bytes": 265760,
+  "url": "https://www.stats.gov.cn/sj/zxfb/202610/t20261014_1965476.html",
+  "ctype": "text/html"
+ },
+ "nbs_sample_gdp": {
+  "status": 200,
+  "bytes": 388238,
+  "url": "https://www.stats.gov.cn/sj/zxfb/202608/t20260817_1965056.html",
+  "ctype": "text/html"
  },
  "nbs_sjjd": {
   "status": 200,
   "bytes": 77054,
   "url": "https://www.stats.gov.cn/sj/sjjd/",
-  "ctype": "text/html",
-  "set_cookie": ""
+  "ctype": "text/html"
  },
- "nbs_sjjd_100": {
+ "nbs_sjjd_70": [
+  [
+   "国家统计局城市司高级统计师杨彩芳解读2026年9月份商品住宅销售价格变动情况统计数据",
+   "https://www.stats.gov.cn/sj/sjjd/202610/t20261019_1965610.html"
+  ]
+ ],
+ "nbs_sjjd_70city": {
   "status": 200,
-  "bytes": 85312,
-  "url": "https://www.stats.gov.cn/sj/sjjd/index_100.html",
-  "ctype": "text/html",
-  "set_cookie": ""
+  "bytes": 87776,
+  "url": "https://www.stats.gov.cn/sj/sjjd/202610/t20261019_1965610.html",
+  "ctype": "text/html"
  },
- "pboc_news_p2": {
-  "status": 200,
-  "bytes": 38237,
-  "url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/11040-2.html",
-  "ctype": "text/html",
-  "set_cookie": ""
- },
- "pboc_news_p200": {
-  "status": 200,
-  "bytes": 38670,
-  "url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/11040-200.html",
-  "ctype": "text/html",
-  "set_cookie": ""
- },
- "pboc_stats_index": {
-  "status": 200,
-  "bytes": 89073,
-  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html",
-  "ctype": "text/html",
-  "set_cookie": ""
- },
- "pboc_stats_2025": {
+ "ndrc_list_40": {
   "status": 404,
-  "bytes": 548,
-  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/2025nian/index.html",
-  "ctype": "text/html",
-  "set_cookie": "SF_cookie_1=90764537; path=/"
+  "bytes": 958,
+  "url": "https://www.ndrc.gov.cn/xwdt/xwfb/index_40.html",
+  "ctype": "text/html;charset=utf-8"
  },
- "ndrc_docx": {
+ "ndrc_list_60": {
+  "status": 404,
+  "bytes": 958,
+  "url": "https://www.ndrc.gov.cn/xwdt/xwfb/index_60.html",
+  "ctype": "text/html;charset=utf-8"
+ },
+ "ndrc_list_80": {
+  "status": 404,
+  "bytes": 958,
+  "url": "https://www.ndrc.gov.cn/xwdt/xwfb/index_80.html",
+  "ctype": "text/html;charset=utf-8"
+ },
+ "mof_lgb_list_9": {
   "status": 200,
-  "bytes": 35093,
-  "url": "https://www.ndrc.gov.cn/xwdt/xwfb/202105/W020210518518450177907.docx",
-  "ctype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "set_cookie": ""
+  "bytes": 12336,
+  "url": "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_9.htm",
+  "ctype": "text/html"
  },
- "ndrc_list_p20": {
+ "mof_lgb_list_11": {
   "status": 200,
-  "bytes": 11666,
-  "url": "https://www.ndrc.gov.cn/xwdt/xwfb/index_20.html",
-  "ctype": "text/html",
-  "set_cookie": ""
+  "bytes": 12310,
+  "url": "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_11.htm",
+  "ctype": "text/html"
  },
- "mof_lgb_list_4": {
+ "mof_lgb_list_13": {
   "status": 200,
-  "bytes": 12576,
-  "url": "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_4.htm",
-  "ctype": "text/html",
-  "set_cookie": ""
+  "bytes": 11732,
+  "url": "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_13.htm",
+  "ctype": "text/html"
  },
- "mof_lgb_list_8": {
-  "status": 200,
-  "bytes": 12374,
-  "url": "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_8.htm",
-  "ctype": "text/html",
-  "set_cookie": ""
+ "mof_gks_gzgl": {
+  "status": 502,
+  "bytes": 1961,
+  "url": "https://gks.mof.gov.cn/ztztz/guozaiguanli/",
+  "ctype": "text/html"
  },
- "mof_lgb_list_15": {
-  "status": 200,
-  "bytes": 7588,
-  "url": "http://www.mof.gov.cn/404.htm",
-  "ctype": "text/html",
-  "set_cookie": ""
- },
- "mof_gks_gzfx": {
-  "status": 200,
-  "bytes": 7588,
-  "url": "http://www.mof.gov.cn/404.htm",
-  "ctype": "text/html",
-  "set_cookie": ""
- },
- "mof_gks": {
-  "status": 200,
-  "bytes": 19918,
-  "url": "https://gks.mof.gov.cn/",
-  "ctype": "text/html",
-  "set_cookie": ""
- },
- "celma": {
-  "status": 418,
-  "bytes": 3222,
-  "url": "https://www.celma.org.cn/",
-  "ctype": "text/html; charset=utf-8",
-  "set_cookie": "HWWAFSESID=d5cfa73a5d9827e7d0; path=/, HWWAFSESTIME=1792374984159; path=/"
- },
- "chinabond": {
-  "status": 200,
-  "bytes": 665,
-  "url": "https://www.chinabond.com.cn/",
-  "ctype": "text/html",
-  "set_cookie": ""
- }
+ "mof_gks_links": []
 }
