@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>China Activity Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<!--INLINE_DATA-->
+<style>
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --wash:rgba(11,11,11,.04);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b; --neutral:#898781;
+  --good-ink:#006300;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.05);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --good-ink:#0ca30c;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.05);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  --good-ink:#0ca30c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:16px 20px 8px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;justify-content:space-between}
+h1{font-size:20px;margin:0;font-weight:650}
+.sub{color:var(--ink2);font-size:13px}
+.hdr-right{display:flex;gap:12px;align-items:center;color:var(--ink2);font-size:12px;flex-wrap:wrap}
+button,select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px 10px}
+button{cursor:pointer}
+button:hover{background:var(--wash)}
+button[aria-pressed="true"]{border-color:var(--ink2);font-weight:600}
+nav{display:flex;gap:2px;padding:0 16px;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:thin}
+nav button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 12px;white-space:nowrap;color:var(--ink2)}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+.filters{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:12px 20px;color:var(--ink2);font-size:13px}
+.seg{display:inline-flex;gap:4px}
+main{padding:0 20px 40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px 10px;min-width:0}
+.card h3{margin:0;font-size:15px;font-weight:620}
+.card .csub{color:var(--ink2);font-size:12px;margin:2px 0 6px}
+.chart{width:100%;height:300px}
+.prov{color:var(--muted);font-size:11.5px;border-top:1px solid var(--border);margin-top:6px;padding-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.prov a{color:var(--ink2)}
+.prov details{width:100%}
+.prov summary{cursor:pointer}
+.empty{height:300px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--ink2);font-size:13px;padding:20px;background:var(--wash);border-radius:8px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.tile .lab{color:var(--ink2);font-size:12px}
+.tile .val{font-size:24px;font-weight:620;margin-top:2px}
+.tile .meta{color:var(--muted);font-size:11.5px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--ink2);font-weight:600;position:sticky;top:0;background:var(--surface)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.tablewrap{max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.status{display:inline-flex;align-items:center;gap:5px;font-weight:600;font-size:12px;white-space:nowrap}
+.status i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.PASS i{background:var(--good)} .WARN i{background:var(--warning)} .FAIL i{background:var(--critical)} .NOT_TESTABLE i{background:var(--neutral)}
+.banner{margin:0 20px 12px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font-size:13px}
+.banner strong{font-weight:650}
+.note{color:var(--ink2);font-size:13px;max-width:900px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:13px}
+.kv div:nth-child(odd){color:var(--ink2)}
+.check{font-size:13px;margin:2px 0}
+.check b{font-weight:600}
+h2{font-size:16px;margin:18px 0 8px;font-weight:640}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+@media (max-width:600px){header,main,.filters{padding-left:16px;padding-right:16px}.banner{margin:0 16px 12px}.chart,.empty{height:260px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>China economic activity tracker</h1>
+    <div class="sub">Official statistics and high-frequency fiscal and project data. Every number links to its dataset and raw source.</div>
+  </div>
+  <div class="hdr-right">
+    <span id="asof">Loading…</span>
+    <span id="refresh-state"></span>
+    <button id="refresh" title="Reload data now">Refresh</button>
+    <button id="theme" title="Toggle light/dark">Theme</button>
+  </div>
+</header>
+<div id="banner"></div>
+<nav id="tabs" role="tablist"></nav>
+<div class="filters" id="filters">
+  <span>Range</span>
+  <span class="seg" id="range"></span>
+  <span id="viewfilters"></span>
+</div>
+<main id="main"></main>
+
+<script>
+"use strict";
+const REFRESH_MIN = 15;
+const RANGES = [["3y",3],["5y",5],["10y",10],["All",99]];
+const state = {tab: "overview", range: 5, mode: {}, data: null, charts: [], lastLoad: null, llPair: 0, llLag: null};
+try { const s = JSON.parse(localStorage.getItem("cat-state")||"{}"); Object.assign(state, {tab:s.tab||state.tab, range:s.range||state.range}); } catch(e) {}
+function save(){ try{ localStorage.setItem("cat-state", JSON.stringify({tab:state.tab, range:state.range})); }catch(e){} }
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SERIES_VARS = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
+const el = (tag, attrs={}, ...kids) => { const e=document.createElement(tag); for(const[k,v] of Object.entries(attrs)){ if(k==="class") e.className=v; else if(k.startsWith("on")) e.addEventListener(k.slice(2),v); else if(v!==undefined&&v!==null) e.setAttribute(k,v);} for(const k of kids){ if(k==null) continue; e.append(k.nodeType?k:document.createTextNode(String(k))); } return e; };
+const axfmt = v => Math.abs(v)>=1e4 ? (v/1e3).toLocaleString()+"K" : String(+Number(v).toFixed(2));
+const fmt = (v, d=1) => v==null||isNaN(v) ? "–" : Math.abs(v)>=1e4 ? (v/1e3).toLocaleString(undefined,{maximumFractionDigits:1})+"K" : Number(v).toLocaleString(undefined,{maximumFractionDigits:d, minimumFractionDigits:d});
+
+// ---------------------------------------------------------------- data loading
+const FILES = ["meta","catalog","analytics","validation","breaks","bonds","source_status"];
+async function load(){
+  let d;
+  if (window.__INLINE_DATA__) d = window.__INLINE_DATA__;
+  else {
+    d = {};
+    await Promise.all(FILES.map(async f => {
+      try { const r = await fetch(`data/${f}.json?t=${Date.now()}`, {cache:"no-store"}); d[f] = r.ok ? await r.json() : null; }
+      catch(e){ d[f] = null; }
+    }));
+  }
+  state.data = d; state.lastLoad = new Date();
+  render();
+}
+setInterval(() => { if (!document.hidden && !window.__INLINE_DATA__) load(); }, REFRESH_MIN*60*1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && state.lastLoad && (Date.now()-state.lastLoad)>REFRESH_MIN*60*1000 && !window.__INLINE_DATA__) load(); });
+
+// ---------------------------------------------------------------- series helpers
+function S(id){ const c = state.data?.catalog?.[id]; return c || null; }
+function cutoff(){ const d=new Date(); d.setFullYear(d.getFullYear()-state.range); return d.toISOString().slice(0,10); }
+function pts(id){ const s=S(id); if(!s) return []; const c=cutoff(); const out=[]; for(let i=0;i<s.t.length;i++){ if(s.t[i]>=c) out.push([s.t[i], s.v[i]]);} return out; }
+function last(id){ const s=S(id); if(!s||!s.t.length) return null; return {t:s.t[s.t.length-1], v:s.v[s.v.length-1]}; }
+function globMatch(pat, id){ const rx = new RegExp("^"+pat.replace(/[.+^${}()|[\]\\]/g,"\\$&").replace(/\*/g,".*")+"$"); return rx.test(id); }
+function breaksFor(ids){
+  const out=[]; for(const b of (state.data?.breaks||[])){ if(String(b.date)==="annual") continue;
+    if((b.series||[]).some(p => ids.some(id => globMatch(p, id) || globMatch(p, id.split("~")[0])))) out.push(b); }
+  return out;
+}
+
+// ---------------------------------------------------------------- chart factory
+function chartCard({title, sub, series, type="line", unit="", stack=false, zero=false, note, std=false, bands}){
+  const card = el("div",{class:"card"});
+  card.append(el("h3",{},title));
+  if (sub) card.append(el("div",{class:"csub"}, sub));
+  const avail = series.filter(s => S(s.id) && S(s.id).t.length);
+  if (!avail.length){
+    const why = missingReason(series.map(s=>s.id));
+    card.append(el("div",{class:"empty"}, "No data yet. ", why));
+    card.append(provBlock(series.map(s=>s.id)));
+    return card;
+  }
+  const box = el("div",{class:"chart",role:"img","aria-label":title});
+  card.append(box);
+  const tableBtn = el("button",{style:"font-size:12px;padding:3px 8px;margin-top:6px"},"Table view");
+  const tableBox = el("div",{style:"display:none;margin-top:6px"});
+  tableBtn.addEventListener("click",()=>{ const on = tableBox.style.display==="none"; tableBox.style.display = on?"block":"none"; tableBtn.textContent = on?"Hide table":"Table view"; if(on && !tableBox.firstChild) tableBox.append(seriesTable(avail)); });
+  card.append(tableBtn, tableBox);
+  if (note) card.append(el("div",{class:"csub",style:"margin-top:6px"}, note));
+  card.append(provBlock(series.map(s=>s.id)));
+  requestAnimationFrame(()=>drawChart(box, {series:avail, type, unit, stack, zero, std, bands}));
+  return card;
+}
+
+function zscore(p){ const v=p.map(x=>x[1]); const m=v.reduce((a,b)=>a+b,0)/v.length; const sd=Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/Math.max(v.length-1,1))||1; return p.map(([t,x])=>[t,(x-m)/sd]); }
+
+function drawChart(box, {series, type, unit, stack, zero, std, bands}){
+  const ch = echarts.init(box, null, {renderer:"svg"});
+  state.charts.push(ch);
+  const ink2 = css("--ink2"), muted=css("--muted"), grid=css("--grid"), axis=css("--axis"), surface=css("--surface"), ink=css("--ink");
+  const brks = breaksFor(series.map(s=>s.id));
+  const cut = cutoff();
+  const marks = brks.filter(b => String(b.date) >= cut).map(b => ({xAxis:String(b.date), label:{formatter:b.id.replace(/_/g," "), color:muted, fontSize:10, position:"insideEndTop"}, lineStyle:{color:axis, type:"solid", width:1}}));
+  const opt = {
+    animation:false, backgroundColor:"transparent",
+    grid:{left:8,right:16,top:series.length>1?(series.length>5?52:34):14,bottom:8,containLabel:true},
+    legend: series.length>1 ? {top:0,left:0,itemWidth:14,itemHeight:type==="line"?2:8,textStyle:{color:ink2,fontSize:12},icon:type==="line"?"rect":"roundRect"} : undefined,
+    tooltip:{trigger:"axis",axisPointer:{type:"line",lineStyle:{color:axis}},backgroundColor:surface,borderColor:css("--border"),textStyle:{color:ink,fontSize:12},
+      valueFormatter:v=> v==null?"–":fmt(v, Math.abs(v)<100?2:0)+(std?" sd":unit==="%"||unit==="pp"?" "+unit:"")},
+    xAxis:{type:"time",axisLine:{lineStyle:{color:axis}},axisTick:{show:false},axisLabel:{color:muted,fontSize:11,hideOverlap:true},splitLine:{show:false}},
+    yAxis:{type:"value",scale:!zero,axisLabel:{color:muted,fontSize:11,formatter:axfmt},splitLine:{lineStyle:{color:grid,width:1}},name:std?"standardised (sd)":"",nameTextStyle:{color:muted,fontSize:11,align:"left"}},
+    series: series.map((s,i) => {
+      let data = pts(s.id); if (std) data = zscore(data);
+      const color = css(SERIES_VARS[(s.slot ?? i) % 8]);
+      const base = {name:s.label||S(s.id).meta.name||s.id, data, color};
+      if ((s.type||type)==="bar") return {...base, type:"bar", stack: stack?"a":undefined, barMaxWidth:24, itemStyle:{borderRadius: stack?0:[4,4,0,0], borderColor: stack?surface:undefined, borderWidth: stack?1:0}, emphasis:{focus:"series"}};
+      return {...base, type:"line", showSymbol:false, symbolSize:8, lineStyle:{width:2,cap:"round",join:"round"}, connectNulls:false, emphasis:{focus:"series"}};
+    })
+  };
+  if (marks.length) opt.series[0].markLine = {symbol:"none", silent:false, data:marks, tooltip:{show:true, formatter:p=>brks.find(b=>String(b.date)===p.value || b.id.replace(/_/g," ")===p.name)?.what||p.name}};
+  if (bands && opt.series[0]) opt.series[0].markLine = {...(opt.series[0].markLine||{symbol:"none",data:[]}), data:[...(opt.series[0].markLine?.data||[]), ...bands.map(y=>({yAxis:y,label:{show:false},lineStyle:{color:axis,type:"solid",width:1}}))]};
+  ch.setOption(opt);
+}
+
+function seriesTable(series){
+  const ids = series.map(s=>s.id); const map = new Map();
+  ids.forEach((id,j)=>pts(id).forEach(([t,v])=>{ if(!map.has(t)) map.set(t, Array(ids.length).fill(null)); map.get(t)[j]=v; }));
+  const rows = [...map.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+  const tbl = el("table"); const thead = el("tr",{}, el("th",{},"Period"), ...ids.map(id=>el("th",{}, S(id)?.meta?.name||id)), el("th",{},"Source of each value"));
+  tbl.append(el("thead",{},thead)); const tb = el("tbody");
+  const srcOf = (id,t) => { const s=S(id); if(!s||!s.si) return null; const i=s.t.indexOf(t); return i<0?null:s.src[s.si[i]]; };
+  rows.forEach(([t,vals]) => { const links = el("td",{class:"mono"});
+    ids.forEach(id=>{ const sr=srcOf(id,t); if(!sr) return; if (sr.url) links.append(el("a",{href:sr.url,target:"_blank",rel:"noopener",title:`${id} · vintage ${sr.vintage} · raw ${sr.raw||"–"} · ${sr.lineage}`}, sr.tier==="derived"?"calc":"src"), " "); else links.append(el("span",{title:`${id} · ${sr.lineage}`},"calc")," "); });
+    tb.append(el("tr",{}, el("td",{},t), ...vals.map(v=>el("td",{class:"num"}, fmt(v,2))), links)); });
+  tbl.append(tb); return el("div",{class:"tablewrap",style:"max-height:260px"}, tbl);
+}
+
+function provBlock(ids){
+  const p = el("div",{class:"prov"});
+  const det = el("details"); det.append(el("summary",{}, `Datasets (${ids.length}): trace each series`));
+  const list = el("div",{class:"mono"});
+  ids.forEach(id => {
+    const s = S(id);
+    const row = el("div",{style:"margin:3px 0"});
+    row.append(el("b",{},id), " — ");
+    if (!s){ row.append("not in store"); list.append(row); return; }
+    const pr = s.prov;
+    row.append(`${pr.tier}`, " · ", pr.source, " · vintage ", pr.vintage||"?", " · ", pr.lineage||"");
+    if (pr.url){ row.append(" · "); row.append(el("a",{href:pr.url,target:"_blank",rel:"noopener"},"source")); }
+    if (pr.raw_file){ row.append(" · raw: ", pr.raw_file); }
+    if (s.note) row.append(" · ", s.note);
+    if (pr.tier==="fallback") row.append(el("b",{style:"color:var(--ink)"}," · FALLBACK SOURCE"));
+    list.append(row);
+  });
+  det.append(list); p.append(det);
+  const l = ids.map(last).filter(Boolean).sort((a,b)=>b.t.localeCompare(a.t))[0];
+  if (l) p.prepend(el("span",{},`Latest period ${l.t}`));
+  return p;
+}
+
+function missingReason(ids){
+  const st = state.data?.source_status || {};
+  const reach = st._reachability || {};
+  const down = Object.entries(reach).filter(([k,v])=>!v.ok).map(([k])=>k);
+  if (!state.data?.catalog || !Object.keys(state.data.catalog).length) return "The store is empty: no source has been ingested yet." + (down.length?` Unreachable from the build environment: ${down.join(", ")}.`:"");
+  return down.length ? `Unreachable at last build: ${down.join(", ")}. See Data & sources.` : "Series not produced at last build; see Data & sources.";
+}
+
+// ---------------------------------------------------------------- views
+const VIEWS = {
+  overview: {label:"Overview", render: renderOverview},
+  gdp: {label:"GDP", render: () => [
+    chartCard({title:"Real GDP growth", sub:"% y/y, quarterly · NBS", unit:"%", series:[{id:"gdp.real_yoy",label:"Real GDP y/y"}]}),
+    chartCard({title:"Real GDP, q/q seasonally adjusted (NBS)", sub:"% q/q · NBS published SA", unit:"%", type:"bar", zero:true, series:[{id:"gdp.sa_qoq",label:"GDP q/q SA"}]}),
+    chartCard({title:"Contributions to real GDP growth by sector", sub:"pp of YTD real growth · tracker estimate", unit:"pp", type:"bar", stack:true, zero:true,
+      series:[{id:"gdp.contrib_primary",label:"Primary"},{id:"gdp.contrib_secondary",label:"Secondary"},{id:"gdp.contrib_tertiary",label:"Tertiary"}],
+      note:"Tracker approximation: prior-year YTD nominal share × sector YTD real growth; the sum differs from headline growth by price and chain-weighting effects."}),
+    chartCard({title:"Sector real growth, year-to-date", sub:"% y/y, YTD · NBS", unit:"%", series:[{id:"gdp.primary_real_ytd_yoy",label:"Primary"},{id:"gdp.secondary_real_ytd_yoy",label:"Secondary"},{id:"gdp.tertiary_real_ytd_yoy",label:"Tertiary"}]}),
+  ]},
+  activity: {label:"Activity", filters:{measure:[["yoy","y/y"],["sa","SA m/m"],["real","Real y/y"],["level","Level"]]}, render: renderActivity},
+  credit: {label:"Credit", render: () => [
+    chartCard({title:"Credit impulse, % of GDP", sub:"Δ12m of 12-month flow, % of trailing 4Q nominal GDP · from 2024 (NBS GDP history starts late 2021)", unit:"%", zero:true,
+      series:[{id:"tsf.flow~impulse",label:"TSF"},{id:"tsf.flow_ex_govt~impulse",label:"TSF ex-govt bonds"},{id:"loans.total~impulse",label:"RMB loans"}]}),
+    chartCard({title:"Credit impulse, % of TSF stock (long history)", sub:"Δ12m of 12-month flow, % of TSF stock 12 months earlier · PBoC tables", unit:"%", zero:true,
+      series:[{id:"tsf.flow~impulse_stk",label:"TSF"},{id:"tsf.flow_ex_govt~impulse_stk",label:"TSF ex-govt bonds"},{id:"tsf.govt_bonds~impulse_stk",label:"Govt bonds"}]}),
+    chartCard({title:"Total social financing: monthly flow by component", sub:"RMB bn · PBoC", unit:"RMB bn", type:"bar", stack:true, zero:true,
+      series:[{id:"tsf.rmb_loans",label:"RMB loans"},{id:"tsf.govt_bonds",label:"Govt bonds"},{id:"tsf.corp_bonds",label:"Corp bonds"},{id:"tsf.undiscounted_ba",label:"Undiscounted BA"},{id:"tsf.equity",label:"Equity"},{id:"tsf.trust",label:"Trust"},{id:"tsf.entrusted",label:"Entrusted"},{id:"tsf.fx_loans",label:"FX loans"}]}),
+    chartCard({title:"TSF: 12-month rolling flow", sub:"RMB bn · total vs ex-government bonds", unit:"RMB bn",
+      series:[{id:"tsf.flow~12m",label:"TSF"},{id:"tsf.flow_ex_govt~12m",label:"TSF ex-govt"}]}),
+    chartCard({title:"TSF stock growth", sub:"% y/y · PBoC published", unit:"%", series:[{id:"tsf.stock_yoy",label:"TSF stock y/y"}]}),
+    chartCard({title:"New loans by sector", sub:"RMB bn per month · PBoC (single months from YTD differences)", unit:"RMB bn", type:"bar", stack:true, zero:true,
+      series:[{id:"loans.hh_total",label:"Household"},{id:"loans.corp_total",label:"Corporate"},{id:"loans.nbfi",label:"Non-bank FIs"}]}),
+    chartCard({title:"New loans by tenor", sub:"RMB bn per month · PBoC", unit:"RMB bn", type:"bar", stack:true, zero:true,
+      series:[{id:"loans.hh_short",label:"HH short"},{id:"loans.hh_medlong",label:"HH med/long"},{id:"loans.corp_short",label:"Corp short"},{id:"loans.corp_medlong",label:"Corp med/long"},{id:"loans.corp_bills",label:"Bills"}]}),
+    chartCard({title:"M1 and M2 growth", sub:"% y/y · PBoC/NBS", unit:"%", series:[{id:"money.m2_yoy",label:"M2"},{id:"money.m1_yoy",label:"M1"}], note:"M1 redefined from Jan 2025 (household demand deposits + payment-institution reserves added): see break marker."}),
+    chartCard({title:"M1 – M2 growth gap", sub:"pp · published y/y from 2021; earlier months from money-supply table levels (flagged from_levels; up to ~1pp off published, e.g. M2 Dec-2014) · M1 redefined Jan-2025", unit:"pp", zero:true, series:[{id:"money.m1_m2_gap",label:"M1-M2"}]}),
+  ]},
+  property: {label:"Property", filters:{segment:[["new","New homes"],["used","Second-hand"]]}, render: renderProperty},
+  bonds: {label:"Bonds & fiscal", render: renderBonds},
+  projects: {label:"Projects", render: () => [
+    chartCard({title:"NDRC approved fixed-asset investment projects: value", sub:"RMB bn per month · NDRC press conferences (single-month statements only)", unit:"RMB bn", type:"bar", zero:true,
+      series:[{id:"ndrc.approvals_value",label:"Approved investment"},{id:"ndrc.approvals_value~3mma",label:"3m avg",type:"line"}],
+      note:"NDRC does not publish a regular series; months without a single-month statement are gaps, not zeros."}),
+    chartCard({title:"NDRC approvals: number of projects", sub:"projects per month · NDRC", unit:"projects", type:"bar", zero:true, series:[{id:"ndrc.approvals_count",label:"Projects"}]}),
+    projectTypes(),
+  ]},
+  leadlag: {label:"Lead–lag lab", render: renderLeadLag},
+  nowcast: {label:"Nowcast", render: renderNowcast},
+  validation: {label:"Validation", render: renderValidation},
+  sources: {label:"Data & sources", render: renderSources},
+};
+
+function renderOverview(){
+  const out = [];
+  const tiles = el("div",{class:"tiles"});
+  const T = [["gdp.real_yoy","Real GDP","% y/y"],["ip.yoy","Industrial production","% y/y"],["retail.yoy","Retail sales","% y/y"],
+    ["fai.ytd_yoy","Fixed-asset investment","% YTD y/y"],["fai.ytd~cyoy","FAI, single month","% y/y (comparable)"],["tsf.flow_ex_govt~impulse_stk","Credit impulse ex-govt","% of TSF stock"],
+    ["money.m1_m2_gap","M1 – M2 gap","pp"],["hp.new.all70.mom","New home prices, 70 cities","% m/m"],["lgb.special_new","New special bonds, latest month","RMB bn"]];
+  for (const [id,lab,u] of T){
+    const l = last(id); const s=S(id);
+    tiles.append(el("div",{class:"tile"}, el("div",{class:"lab"},lab), el("div",{class:"val"}, l?fmt(l.v, Math.abs(l.v)<100?1:0):"–"),
+      el("div",{class:"meta"}, l?`${u} · ${l.t} · ${s.prov.source}${s.prov.tier==="fallback"?" (fallback)":""}`:`${u} · no data`)));
+  }
+  out.push(tiles);
+  const g = el("div",{class:"grid"});
+  g.append(chartCard({title:"Activity momentum", sub:"% y/y, 3-month average · NBS", unit:"%",
+    series:[{id:"ip.yoy~3mma",label:"IP"},{id:"retail.yoy~3mma",label:"Retail"},{id:"fai.ytd~cyoy~3mma",label:"FAI (single month)"}]}));
+  g.append(chartCard({title:"Credit and fiscal impulse", sub:"Δ12m of 12-month flow, % of TSF stock a year earlier (GDP-free; used in the lead–lag tests)", unit:"%", zero:true,
+    series:[{id:"tsf.flow_ex_govt~impulse_stk",label:"Credit ex-govt"},{id:"tsf.govt_bonds~impulse_stk",label:"Govt bond net financing"},{id:"tsf.flow~impulse_stk",label:"Total TSF"}]}));
+  out.push(g);
+  out.push(el("h2",{},"Leading-indicator verdicts"));
+  const ll = state.data?.analytics?.lead_lag || [];
+  const tb = el("table"); tb.append(el("thead",{},el("tr",{},...["Pair","Verdict","Best lead","Prewhitened corr","Placebo p","Granger p","n"].map(h=>el("th",{},h)))));
+  const body = el("tbody");
+  ll.forEach(r => body.append(el("tr",{}, el("td",{},r.label), el("td",{}, r.verdict || r.status), el("td",{class:"num"}, r.best_lead??"–"),
+    el("td",{class:"num"}, fmt(r.best_lead_corr,2)), el("td",{class:"num"}, fmt(r.placebo_p,3)), el("td",{class:"num"}, fmt(r.granger_p,3)), el("td",{class:"num"}, r.n??"–"))));
+  tb.append(body); out.push(el("div",{class:"tablewrap"},tb));
+  return out;
+}
+
+function renderActivity(){
+  const m = state.mode.measure || "yoy";
+  const C = [];
+  if (m==="yoy"){
+    C.push(chartCard({title:"Industrial production", sub:"% y/y · NBS", unit:"%", series:[{id:"ip.yoy",label:"y/y"},{id:"ip.yoy~3mma",label:"3m avg"}]}));
+    C.push(chartCard({title:"Retail sales", sub:"% y/y · NBS published vs tracker comparable-basis reconstruction", unit:"%", series:[{id:"retail.yoy",label:"Published"},{id:"retail.ytd~cyoy",label:"Reconstructed from YTD"}]}));
+    C.push(chartCard({title:"Fixed-asset investment, single month", sub:"% y/y, comparable basis (implied from YTD releases) · tracker calc", unit:"%", series:[{id:"fai.ytd~cyoy",label:"Single month"},{id:"fai.ytd_yoy",label:"YTD (published)"}]}));
+    C.push(chartCard({title:"FAI by sector", sub:"% YTD y/y · NBS", unit:"%", series:[{id:"fai.infra_ytd_yoy",label:"Infrastructure (ex power)"},{id:"fai.mfg_ytd_yoy",label:"Manufacturing"},{id:"fai.re_ytd_yoy",label:"Real estate"}]}));
+    C.push(chartCard({title:"Published vs level-implied y/y: the comparable-basis gap", sub:"% y/y · gap = NBS sample/base adjustments", unit:"%", series:[{id:"fai.ytd_yoy",label:"FAI YTD published"},{id:"fai.ytd~sm~nyoy",label:"Single month from levels (naive)"}]}));
+  } else if (m==="sa"){
+    C.push(chartCard({title:"Retail sales, seasonally adjusted", sub:"% m/m SA · X-13 with Lunar New Year regressors, on the implied comparable-basis level · seasonal factors are two-sided: history revises", unit:"%", type:"bar", zero:true, series:[{id:"retail.level~clevel~sa_mom",label:"m/m SA"}]}));
+    C.push(chartCard({title:"Retail sales: SA level, X-13 vs STL cross-check", sub:"implied comparable-basis level (RMB bn) · X-13 vs STL", unit:"RMB bn", series:[{id:"retail.level~clevel~sa",label:"X-13"},{id:"retail.level~clevel~sa_stl",label:"STL cross-check"}]}));
+    C.push(chartCard({title:"FAI, seasonally adjusted (single month)", sub:"% m/m SA · comparable-basis level chained from official-consistent y/y (removes January sample-redraw jumps), then X-13 · history revises as data are added", unit:"%", type:"bar", zero:true, series:[{id:"fai.ytd~clevel~sa_mom",label:"m/m SA"}]}));
+    C.push(chartCard({title:"FAI momentum", sub:"% 3m/3m annualised, SA · built on revising seasonal factors; not a real-time signal", unit:"%", zero:true, series:[{id:"fai.ytd~clevel~saar3",label:"FAI"},{id:"retail.level~clevel~saar3",label:"Retail"}]}));
+    C.push(el("div",{class:"card"}, el("h3",{},"Why there is no tracker SA series for industrial production"),
+      el("p",{class:"note"},"NBS publishes only growth rates for industrial value-added, not levels, so a level series cannot be built for seasonal adjustment. Rebuilding one from y/y rates would need an unknown base-year seasonal pattern. The tracker shows NBS y/y and its 3-month average instead.")));
+  } else if (m==="real"){
+    C.push(chartCard({title:"Retail sales: nominal vs real", sub:"% y/y · real = deflated by CPI consumer goods", unit:"%", series:[{id:"retail.yoy",label:"Nominal"},{id:"retail.yoy~real",label:"Real"}]}));
+    C.push(chartCard({title:"FAI single month: nominal vs real", sub:"% y/y · real = deflated by PPI (proxy; NBS FAI price index discontinued)", unit:"%", series:[{id:"fai.ytd~cyoy",label:"Nominal"},{id:"fai.ytd~cyoy~real",label:"Real (PPI proxy)"}]}));
+    C.push(chartCard({title:"Deflators", sub:"% y/y · NBS", unit:"%", series:[{id:"prices.cpi_goods_yoy",label:"CPI goods"},{id:"prices.ppi_yoy",label:"PPI"},{id:"prices.cpi_yoy",label:"CPI"}]}));
+  } else {
+    C.push(chartCard({title:"Retail sales, monthly value", sub:"RMB bn · NBS (Feb = Jan–Feb combined)", unit:"RMB bn", type:"bar", zero:true, series:[{id:"retail.level",label:"Retail sales"}]}));
+    C.push(chartCard({title:"FAI, single month value", sub:"RMB bn · from YTD; Feb = Jan–Feb combined", unit:"RMB bn", type:"bar", zero:true, series:[{id:"fai.ytd~sm",label:"FAI"}]}));
+    C.push(chartCard({title:"FAI, year-to-date value", sub:"RMB bn · NBS published", unit:"RMB bn", series:[{id:"fai.ytd",label:"FAI YTD"}]}));
+  }
+  C.push(chartCard({title:"Physical proxies (validation, not inputs)", sub:"% y/y, 3-month average · NBS output data", unit:"%", series:[{id:"proxy.cement_yoy~3mma",label:"Cement"},{id:"proxy.steel_yoy~3mma",label:"Crude steel"},{id:"proxy.power_yoy~3mma",label:"Power generation"}]}));
+  return C;
+}
+
+function renderProperty(){
+  const seg = state.mode.segment || "new";
+  const segn = seg==="new"?"new commercial residential":"second-hand residential";
+  return [
+    chartCard({title:`Home prices by city tier, m/m (${segn})`, sub:"% m/m · tracker tier means of NBS 70-city indices", unit:"%", zero:true,
+      series:["tier1","tier2","tier3"].map((t,i)=>({id:`hp.${seg}.${t}.mom`,label:t.replace("tier","Tier ")}))}),
+    chartCard({title:`Home prices by city tier, y/y (${segn})`, sub:"% y/y · tracker tier means", unit:"%", zero:true,
+      series:["tier1","tier2","tier3"].map(t=>({id:`hp.${seg}.${t}.yoy`,label:t.replace("tier","Tier ")}))}),
+    chartCard({title:`Home price level by tier (${segn})`, sub:"chained index, 2022 average = 100 (gaps not bridged)", unit:"index",
+      series:["tier1","tier2","tier3"].map(t=>({id:`hp.${seg}.${t}.level`,label:t.replace("tier","Tier ")}))}),
+    chartCard({title:"Breadth: cities with falling prices", sub:"number of 70 cities with m/m decline", unit:"cities", type:"bar", zero:true, series:[{id:`hp.${seg}.breadth_down`,label:"Cities down m/m"}]}),
+    chartCard({title:"National Real Estate Climate Index", sub:"index · NBS (国房景气指数)", unit:"index", series:[{id:"re.climate",label:"Climate index"}], bands:[100]}),
+    chartCard({title:"Housing starts, completions, sales", sub:"% y/y, single month (comparable basis) · floor space", unit:"%",
+      series:[{id:"re.starts_ytd~cyoy",label:"New starts"},{id:"re.completions_ytd~cyoy",label:"Completions"},{id:"re.sales_ytd~cyoy",label:"Sales"}]}),
+    chartCard({title:"Housing floor space, single month", sub:"mn sqm · Feb = Jan–Feb combined", unit:"mn sqm",
+      series:[{id:"re.starts_ytd~sm",label:"New starts"},{id:"re.completions_ytd~sm",label:"Completions"},{id:"re.sales_ytd~sm",label:"Sales"}]}),
+    chartCard({title:"Real-estate investment", sub:"% y/y single month (comparable) and YTD", unit:"%", series:[{id:"fai.re_ytd~cyoy",label:"Single month"},{id:"fai.re_ytd_yoy",label:"YTD"}]}),
+  ];
+}
+
+function renderBonds(){
+  const out = [];
+  out.push(chartCard({title:"Local government bond issuance by type", sub:"RMB bn per month · MOF", unit:"RMB bn", type:"bar", stack:true, zero:true,
+    series:[{id:"lgb.special_new",label:"New special"},{id:"lgb.general_new",label:"New general"},{id:"lgb.refi_general",label:"Refinancing, general"},{id:"lgb.refi_special",label:"Refinancing, special"}],
+    note:"New money = new general + new special. MOF does not report the hidden-debt swap amount; since 2024-11 the swap programme (RMB2trn a year) is issued as special refinancing bonds, shown below as a labelled proxy. Refinancing funds no new projects."}));
+  out.push(chartCard({title:"Debt-swap issuance (proxy)", sub:"RMB bn per month · all special refinancing bonds since 2024-11, which also include ordinary rollover of maturing special bonds, so this overstates the swap (2025 to September: RMB2.8trn against a RMB2trn quota) · MOF does not state the swap amount", unit:"RMB bn", type:"bar", zero:true,
+    series:[{id:"lgb.refi_swap_proxy",label:"Special refinancing (swap proxy)"}]}));
+  out.push(chartCard({title:"Implied central net financing", sub:"RMB bn · PBoC TSF govt-bond line – MOF local net issuance (reconciliation)", unit:"RMB bn", type:"bar", zero:true,
+    series:[{id:"cgb.net_implied",label:"Implied CGB net"}]}));
+  out.push(chartCard({title:"Fiscal impulse from local bonds", sub:"Δ12m of 12-month issuance, % of GDP", unit:"%", zero:true,
+    series:[{id:"lgb.new_total~impulse",label:"New local bonds"},{id:"lgb.special_new~impulse",label:"New special"},{id:"lgb.net~impulse",label:"Net local issuance"}]}));
+  const b = state.data?.bonds || {};
+  for (const [sid, obj] of Object.entries(b)){
+    if (sid==="quotas") continue;
+    const card = el("div",{class:"card"});
+    card.append(el("h3",{}, `Issuance pace: ${S(sid)?.meta?.name || sid}`));
+    const unitTxt = obj.same_date?.unit || "";
+    const unver = obj.pace.some(r=>r.quota_verified===false && r.quota_bn);
+    card.append(el("div",{class:"csub"}, `Cumulative ${unitTxt} by month, current year vs prior years` + (unitTxt.startsWith("%") && unver ? " · quotas not yet verified against the budget report" : "")));
+    const box = el("div",{class:"chart"}); card.append(box);
+    const years = [...new Set(obj.pace.map(r=>r.year))].sort().slice(-4);
+    requestAnimationFrame(()=>{
+      const ch = echarts.init(box,null,{renderer:"svg"}); state.charts.push(ch);
+      const usePct = unitTxt.startsWith("%");
+      const cur = years[years.length-1];
+      ch.setOption({animation:false, grid:{left:8,right:16,top:34,bottom:8,containLabel:true},
+        legend:{top:0,left:0,itemWidth:14,itemHeight:2,textStyle:{color:css("--ink2"),fontSize:12}},
+        tooltip:{trigger:"axis",backgroundColor:css("--surface"),borderColor:css("--border"),textStyle:{color:css("--ink"),fontSize:12},valueFormatter:v=>v==null?"–":fmt(v,1)+(usePct?"%":" bn")},
+        xAxis:{type:"category",data:[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>"M"+m),axisLabel:{color:css("--muted")},axisLine:{lineStyle:{color:css("--axis")}},axisTick:{show:false}},
+        yAxis:{type:"value",axisLabel:{color:css("--muted"),formatter:axfmt},splitLine:{lineStyle:{color:css("--grid")}}},
+        series: years.map((y,i)=>({name:String(y), type:"line", showSymbol:false,
+          lineStyle:{width:y===cur?2.5:1.5}, color: y===cur? css("--s1") : css(["--s7","--s3","--s2"][i%3]),
+          data:[...Array(12).keys()].map(m=>{ const r=obj.pace.find(r=>r.year===y&&r.month===m+1); return r? (usePct? r.pct_quota : r.cum_bn) : null; })}))});
+    });
+    out.push(card);
+  }
+  const q = b.quotas;
+  if (q){
+    const tb = el("table"); const keys=["cgb_deficit","lg_general_new","lg_special_new","ultra_long_special_cgb","bank_recap_special_cgb","debt_swap_refinancing"];
+    tb.append(el("thead",{},el("tr",{},el("th",{},"Year"),...keys.map(k=>el("th",{},k)),el("th",{},"Verified"),el("th",{},"Source"))));
+    const body=el("tbody"); Object.entries(q).forEach(([y,r])=>body.append(el("tr",{},el("td",{},y),...keys.map(k=>el("td",{class:"num"},r[k]==null?"–":r[k])),el("td",{},r.verified?"yes":"no"),el("td",{},el("a",{href:r.source_url,target:"_blank",rel:"noopener"},"link")))));
+    tb.append(body);
+    out.push(el("div",{class:"card"}, el("h3",{},"NPC budget quotas (RMB bn)"), el("div",{class:"csub"},"Denominators for issuance pace. Unverified rows were transcribed from secondary sources; each is checked against the primary budget report."), el("div",{class:"tablewrap"},tb)));
+  }
+  return out;
+}
+
+function projectTypes(){
+  const card = el("div",{class:"card"});
+  card.append(el("h3",{},"Project types (\"six networks\" classification)"));
+  const cls = state.data?.analytics?.classification;
+  if (!cls){ card.append(el("div",{class:"empty"},"No project-level records ingested yet. Classification runs on special-bond project lists and NDRC/provincial project names once those sources are reachable (see Data & sources). The keyword dictionary and audit method are in docs/methods.md.")); return card; }
+  return card;
+}
+
+function renderLeadLag(){
+  const ll = (state.data?.analytics?.lead_lag || []);
+  const out = [];
+  out.push(el("p",{class:"note"},"Each pair is tested for whether the high-frequency indicator leads the official series. A lead is claimed only if all six tests pass: the prewhitened cross-correlation is significant; it stays significant after dropping the two months that drive it most; it beats a block-shuffled placebo; it passes a HAC Granger test; it is not dominated by the reverse direction; and the same lead holds on the sample without 2020–22. Raw (non-prewhitened) correlations are shown for contrast. They are usually inflated by shared trends."));
+  if (!ll.length){ out.push(el("div",{class:"empty"},"No analytics yet: the store has no data.")); return out; }
+  const sel = el("select",{"aria-label":"Indicator pair"}); ll.forEach((r,i)=>sel.append(el("option",{value:i, ...(i===state.llPair?{selected:""}:{})}, r.label)));
+  sel.addEventListener("change",()=>{state.llPair=+sel.value; state.llLag=null; render();});
+  out.push(el("div",{style:"margin:8px 0 12px"}, "Pair ", sel));
+  const r = ll[state.llPair] || ll[0];
+  if (r.status !== "ok"){ out.push(el("div",{class:"empty"}, `${r.label}: ${r.status}` + (r.n_x!=null?` (x: ${r.n_x} obs, y: ${r.n_y} obs; need 40)`:""))); out.push(provBlock([r.x, r.y])); return out; }
+  const g = el("div",{class:"grid"});
+  // CCF
+  const c1 = el("div",{class:"card"}); c1.append(el("h3",{},"Cross-correlation by lag"), el("div",{class:"csub"},`corr(x(t−k), y(t)); k > 0 means ${r.x} leads. Band = ±1.96/√n`));
+  const b1 = el("div",{class:"chart"}); c1.append(b1); g.append(c1);
+  requestAnimationFrame(()=>{ const ch=echarts.init(b1,null,{renderer:"svg"}); state.charts.push(ch);
+    const ks = Object.keys(r.ccf_prewhitened).map(Number).sort((a,b)=>a-b);
+    ch.setOption({animation:false,grid:{left:8,right:16,top:34,bottom:30,containLabel:true},legend:{top:0,left:0,textStyle:{color:css("--ink2"),fontSize:12},itemWidth:14,itemHeight:8},
+      tooltip:{trigger:"axis",backgroundColor:css("--surface"),borderColor:css("--border"),textStyle:{color:css("--ink"),fontSize:12},valueFormatter:v=>fmt(v,2)},
+      xAxis:{type:"category",data:ks,name:"lag k (months)",nameLocation:"middle",nameGap:24,nameTextStyle:{color:css("--muted")},axisLabel:{color:css("--muted")},axisLine:{lineStyle:{color:css("--axis")}},axisTick:{show:false}},
+      yAxis:{type:"value",min:-1,max:1,axisLabel:{color:css("--muted")},splitLine:{lineStyle:{color:css("--grid")}}},
+      series:[{name:"Prewhitened",type:"bar",barMaxWidth:10,color:css("--s1"),itemStyle:{borderRadius:[2,2,2,2]},data:ks.map(k=>r.ccf_prewhitened[k]),
+                markLine:{symbol:"none",silent:true,label:{show:false},lineStyle:{color:css("--axis"),type:"solid"},data:[{yAxis:r.band95},{yAxis:-r.band95}]}},
+              {name:"Raw (not prewhitened)",type:"line",showSymbol:false,lineStyle:{width:2},color:css("--s2"),data:ks.map(k=>r.ccf_raw[k])}]});
+  });
+  // criteria
+  const c2 = el("div",{class:"card"}); c2.append(el("h3",{},"Verdict"), el("div",{class:"csub"}, r.verdict));
+  const crit = {ccf_significant:"Prewhitened CCF outside 95% band", survives_dropping_2_most_influential:"Still significant without the 2 most influential months", "placebo_p_lt_0.05":"Beats block-shuffled placebo (p < 0.05)", "granger_p_lt_0.05":"Granger causality, HAC (p < 0.05)", not_reverse_dominated:"Not dominated by reverse direction", survives_ex_covid:"Same lead without 2020–22"};
+  Object.entries(crit).forEach(([k,lab])=>{ const ok=r.criteria[k]; c2.append(el("div",{class:"check"}, el("span",{class:"status "+(ok?"PASS":"NOT_TESTABLE")}, el("i"), ok?"Met":"Not met"), " ", lab)); });
+  const kv = el("div",{class:"kv",style:"margin-top:10px"});
+  const add=(k,v)=>{kv.append(el("div",{},k),el("div",{},v));};
+  add("Best lead (months)", r.best_lead); add("Prewhitened corr at best lead", fmt(r.best_lead_corr,2)); add("Best reverse-direction |corr|", fmt(r.best_reverse_corr,2));
+  add("Placebo p", fmt(r.placebo_p,3)); add("Granger p", fmt(r.granger_p,4));
+  if (r.adl?.p){ add("ADL (BIC)", `p=${r.adl.p} own lags, x lags 1..${r.adl.q}, n=${r.adl.n}, R²=${fmt(r.adl.r2,2)}`); add("Σ x-coefficients (HAC p)", `${fmt(r.adl.sum_x,3)} (p=${fmt(r.adl.sum_x_p,3)})`); add("Long-run multiplier", fmt(r.adl.long_run_multiplier,3)); }
+  add("Transforms", `x: ${r.transform_x}, y: ${r.transform_y}; prewhitening AR(${r.ar_order_prewhiten})`);
+  const qa = r.breaks?.quandt_andrews; if (qa?.sup_f) add("Unknown break (Quandt–Andrews)", `sup-F ${fmt(qa.sup_f,2)} at ${qa.break_date}, bootstrap p=${fmt(qa.p_boot,3)}`);
+  Object.entries(r.breaks?.chow||{}).forEach(([d,v])=>add(`Chow at ${d}`, `F=${fmt(v.F,2)}, p=${fmt(v.p,3)}`));
+  if (r.ex_covid) add("Ex-COVID (2020–22 dropped)", r.ex_covid.verdict || r.ex_covid.error);
+  if (r.influence && r.influence.corr != null) add("Without the 2 most influential months (" + (r.influence.dropped || []).join(", ") + ")", "r = " + r.influence.corr.toFixed(2) + (r.influence.significant ? " (still significant)" : " (not significant)"));
+  c2.append(kv); g.append(c2);
+  // rolling
+  const rolling = Object.entries(r.rolling||{});
+  const c3 = el("div",{class:"card"}); c3.append(el("h3",{},"Stability: rolling 36-month prewhitened correlation"), el("div",{class:"csub"},`at lag ${r.best_lead}`));
+  const b3 = el("div",{class:"chart"}); c3.append(b3); g.append(c3);
+  requestAnimationFrame(()=>{ const ch=echarts.init(b3,null,{renderer:"svg"}); state.charts.push(ch);
+    ch.setOption({animation:false,grid:{left:8,right:16,top:14,bottom:8,containLabel:true},tooltip:{trigger:"axis",backgroundColor:css("--surface"),borderColor:css("--border"),textStyle:{color:css("--ink"),fontSize:12},valueFormatter:v=>fmt(v,2)},
+      xAxis:{type:"time",axisLabel:{color:css("--muted")},axisLine:{lineStyle:{color:css("--axis")}}},yAxis:{type:"value",min:-1,max:1,axisLabel:{color:css("--muted")},splitLine:{lineStyle:{color:css("--grid")}}},
+      series:[{type:"line",showSymbol:false,lineStyle:{width:2},color:css("--s1"),data:rolling,name:"Rolling corr"}]});
+  });
+  // lag explorer: standardised overlay with selectable lag
+  const lag = state.llLag ?? r.best_lead ?? 0;
+  const c4 = el("div",{class:"card"});
+  const slider = el("input",{type:"range",min:0,max:12,value:lag,"aria-label":"lag in months",style:"width:160px;vertical-align:middle"});
+  const lagLab = el("span",{},` ${lag} month(s)`);
+  slider.addEventListener("input",()=>{ state.llLag=+slider.value; render(); });
+  c4.append(el("h3",{},"Lag explorer"), el("div",{class:"csub"},"Both series standardised (sd units) on one axis; x shifted forward by the chosen lag. Shift x by ", slider, lagLab));
+  const b4 = el("div",{class:"chart"}); c4.append(b4); g.append(c4);
+  requestAnimationFrame(()=>{ const ch=echarts.init(b4,null,{renderer:"svg"}); state.charts.push(ch);
+    const shift = (p,k)=>p.map(([t,v])=>{ const d=new Date(t); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()+k+1); d.setUTCDate(0); return [d.toISOString().slice(0,10), v]; });
+    const xs = zscore(pts(r.x)), ys = zscore(pts(r.y));
+    ch.setOption({animation:false,grid:{left:8,right:16,top:34,bottom:8,containLabel:true},legend:{top:0,left:0,itemWidth:14,itemHeight:2,textStyle:{color:css("--ink2"),fontSize:12}},
+      tooltip:{trigger:"axis",backgroundColor:css("--surface"),borderColor:css("--border"),textStyle:{color:css("--ink"),fontSize:12},valueFormatter:v=>fmt(v,2)+" sd"},
+      xAxis:{type:"time",axisLabel:{color:css("--muted")},axisLine:{lineStyle:{color:css("--axis")}}},yAxis:{type:"value",axisLabel:{color:css("--muted")},splitLine:{lineStyle:{color:css("--grid")}}},
+      series:[{name:`${S(r.x)?.meta?.name||r.x} (shifted +${lag}m)`,type:"line",showSymbol:false,lineStyle:{width:2},color:css("--s1"),data:shift(xs,lag)},
+              {name:S(r.y)?.meta?.name||r.y,type:"line",showSymbol:false,lineStyle:{width:2},color:css("--s2"),data:ys}]});
+  });
+  out.push(g); out.push(provBlock([r.x, r.y]));
+  return out;
+}
+
+function renderNowcast(){
+  const a = state.data?.analytics || {}; const out = [];
+  out.push(el("p",{class:"note"},"This is a pseudo real-time evaluation. Each predictor is lagged by its publication delay, models are re-estimated on an expanding window, and each is scored against an AR(1) benchmark refitted on the same sample. Significance uses the Clark–West test for nested models. Estimation excludes 2020–21. Live nowcasts are logged before each release and scored once the official figure arrives."));
+  for (const key of ["fai","gdp"]){
+    const ev = a.nowcast?.[key];
+    out.push(el("h2",{}, key==="fai"?"FAI single-month growth (comparable basis)":"Real GDP growth (bridge, first month of quarter)"));
+    if (!ev || ev.error){ out.push(el("div",{class:"empty"}, `Not evaluated: ${ev?.error||"no data"}`)); continue; }
+    const tb = el("table"); tb.append(el("thead",{},el("tr",{},...["Model","OOS months","RMSE","AR RMSE (same sample)","Relative to AR","Clark–West p","Beats AR (CW p<0.10)"].map(h=>el("th",{},h)))));
+    const body = el("tbody");
+    Object.entries(ev.models).forEach(([m,r])=>body.append(r.status ? el("tr",{},el("td",{},m),el("td",{colspan:6},r.status)) :
+      el("tr",{},el("td",{},m),el("td",{class:"num"},`${r.n_oos} (${r.oos_start} to ${r.oos_end})`),el("td",{class:"num"},fmt(r.rmse,2)),el("td",{class:"num"},fmt(r.rmse_ar_same_sample,2)),el("td",{class:"num"},fmt(r.rel_rmse_vs_ar,3)),el("td",{class:"num"},fmt(r.cw_p,3)),el("td",{}, r.beats_ar?"yes":"no"))));
+    tb.append(body);
+    out.push(el("div",{class:"card"}, el("div",{class:"csub"},`Each model is scored against an AR(1) benchmark refitted on that model's own sample. Target ${ev.target}.`), el("div",{class:"tablewrap"},tb)));
+    const box = el("div",{class:"chart"}); out.push(el("div",{class:"card"}, el("h3",{},"Out-of-sample nowcasts vs actual"), box));
+    requestAnimationFrame(()=>{ const ch=echarts.init(box,null,{renderer:"svg"}); state.charts.push(ch);
+      const ms = Object.keys(ev.forecasts).slice(0,4);   // includes the AR benchmark
+      ch.setOption({animation:false,grid:{left:8,right:16,top:34,bottom:8,containLabel:true},legend:{top:0,left:0,itemWidth:14,itemHeight:2,textStyle:{color:css("--ink2"),fontSize:12}},
+        tooltip:{trigger:"axis",backgroundColor:css("--surface"),borderColor:css("--border"),textStyle:{color:css("--ink"),fontSize:12},valueFormatter:v=>fmt(v,2)+" %"},
+        xAxis:{type:"time",axisLabel:{color:css("--muted")},axisLine:{lineStyle:{color:css("--axis")}}},yAxis:{type:"value",scale:true,axisLabel:{color:css("--muted")},splitLine:{lineStyle:{color:css("--grid")}}},
+        series:[{name:"Actual",type:"line",showSymbol:false,lineStyle:{width:2.5},color:css("--ink2"),data:Object.entries(ev.actual)},
+          ...ms.map((m,i)=>({name:m,type:"line",showSymbol:false,lineStyle:{width:1.5},color:css(SERIES_VARS[i]),data:Object.entries(ev.forecasts[m])}))]});
+    });
+    const live = a.live?.[key];
+    if (live && Object.keys(live).length){
+      const t2 = el("table"); t2.append(el("thead",{},el("tr",{},...["Model","Target period","Nowcast","80% interval","Training n"].map(h=>el("th",{},h)))));
+      const b2 = el("tbody"); Object.entries(live).forEach(([m,r])=>b2.append(el("tr",{},el("td",{},m),el("td",{},r.target_period),el("td",{class:"num"},fmt(r.nowcast,2)),el("td",{class:"num"},`${fmt(r.lo80,1)} to ${fmt(r.hi80,1)}`),el("td",{class:"num"},r.n_train))));
+      t2.append(b2); out.push(el("div",{class:"card"}, el("h3",{},"Live nowcast (pre-release)"), el("div",{class:"tablewrap"},t2)));
+    }
+  }
+  const log = a.nowcast_log || [];
+  out.push(el("h2",{},"Pre-release nowcast log and scorecard"));
+  if (!log.length) out.push(el("div",{class:"empty"},"No nowcasts logged yet. The first build with data logs one per model, which is scored when the official figure is published."));
+  else {
+    const t = el("table"); const cols=["made_at","target","target_period","model","nowcast","actual","error","scored_at"];
+    t.append(el("thead",{},el("tr",{},...cols.map(c=>el("th",{},c))))); const b=el("tbody");
+    log.slice().reverse().forEach(r=>b.append(el("tr",{},...cols.map(c=>el("td",{class:typeof r[c]==="number"?"num":""}, typeof r[c]==="number"?fmt(r[c],2):(r[c]??"–"))))));
+    t.append(b); out.push(el("div",{class:"tablewrap"},t));
+    const scored = log.filter(r=>r.error!=null && !isNaN(r.error));
+    if (scored.length){ const rmse=Math.sqrt(scored.reduce((s,r)=>s+r.error*r.error,0)/scored.length); out.push(el("p",{class:"note"},`Scored nowcasts: ${scored.length}; live RMSE ${fmt(rmse,2)} pp.`)); }
+  }
+  return out;
+}
+
+function renderValidation(){
+  const v = state.data?.validation || []; const out=[];
+  const counts = {}; v.forEach(x=>counts[x.status]=(counts[x.status]||0)+1);
+  const tiles = el("div",{class:"tiles"});
+  [["PASS","Pass"],["WARN","Warn"],["FAIL","Fail"],["NOT_TESTABLE","Not testable"]].forEach(([k,l])=>tiles.append(el("div",{class:"tile"}, el("div",{class:"lab"}, el("span",{class:"status "+k}, el("i"), l)), el("div",{class:"val"}, counts[k]||0))));
+  out.push(tiles);
+  out.push(el("p",{class:"note"},"Results are accepted only when: accounting identities hold; cross-source reconciliations are within tolerance; published y/y is reproduced; physical proxies agree in direction (or the divergence is explained); nowcasts are logged before release. Not testable means an input is missing, and it never counts as a pass."));
+  const groups = [...new Set(v.map(x=>x.group))];
+  for (const gname of groups){
+    out.push(el("h2",{},gname));
+    const tb = el("table"); tb.append(el("thead",{},el("tr",{},...["Check","Status","n","Exceptions","Tolerance","Detail"].map(h=>el("th",{},h)))));
+    const body = el("tbody");
+    v.filter(x=>x.group===gname).forEach(x=>{
+      const det = el("td",{}, x.detail);
+      if (x.exceptions?.length){ const d=el("details"); d.append(el("summary",{},`${x.exceptions.length} exception(s)`)); const pre=el("pre",{class:"mono",style:"white-space:pre-wrap;margin:4px 0"}); pre.textContent = x.exceptions.map(e=>JSON.stringify(e)).join("\n"); d.append(pre); det.append(d); }
+      body.append(el("tr",{}, el("td",{},x.description), el("td",{}, el("span",{class:"status "+x.status}, el("i"), x.status.replace("_"," "))), el("td",{class:"num"},x.n), el("td",{class:"num"},x.n_exceptions), el("td",{},x.tolerance), det));
+    });
+    tb.append(body); out.push(el("div",{class:"tablewrap",style:"max-height:none"},tb));
+  }
+  return out;
+}
+
+function renderSources(){
+  const d = state.data || {}; const out=[];
+  const st = d.source_status || {};
+  out.push(el("h2",{},"Source reachability at last build"));
+  const reach = st._reachability || {};
+  const t1 = el("table"); t1.append(el("thead",{},el("tr",{},...["Source","URL","Reachable","Detail"].map(h=>el("th",{},h)))));
+  const b1 = el("tbody"); Object.entries(reach).forEach(([k,v])=>b1.append(el("tr",{},el("td",{},k),el("td",{class:"mono"},v.url),el("td",{}, el("span",{class:"status "+(v.ok?"PASS":"FAIL")},el("i"),v.ok?"yes":"no")),el("td",{class:"mono"},v.detail))));
+  t1.append(b1); out.push(el("div",{class:"tablewrap"},t1));
+  out.push(el("h2",{},"Ingest results"));
+  const t2 = el("table"); t2.append(el("thead",{},el("tr",{},...["Ingest","OK","Detail"].map(h=>el("th",{},h)))));
+  const b2 = el("tbody"); Object.entries(st).filter(([k])=>k!=="_reachability").forEach(([k,v])=>{ const {ok, ...rest}=v; const pre=el("pre",{class:"mono",style:"white-space:pre-wrap;margin:0;max-height:160px;overflow:auto"}); pre.textContent=JSON.stringify(rest,null,1); b2.append(el("tr",{},el("td",{},k),el("td",{},el("span",{class:"status "+(ok?"PASS":"FAIL")},el("i"),ok?"yes":"no")),el("td",{},pre))); });
+  t2.append(b2); out.push(el("div",{class:"tablewrap"},t2));
+  out.push(el("h2",{},"Series catalog"));
+  const q = el("input",{type:"search",placeholder:"Filter series…","aria-label":"Filter series",style:"width:min(100%,320px);margin-bottom:8px"});
+  const wrap = el("div",{class:"tablewrap"});
+  const draw = () => { wrap.textContent=""; const tb=el("table"); const cols=["Series id","Name","Unit","Last period","Last value","Tier","Source","Vintage","Lineage","Raw file"];
+    tb.append(el("thead",{},el("tr",{},...cols.map(c=>el("th",{},c))))); const body=el("tbody"); const f=q.value.toLowerCase();
+    Object.entries(d.catalog||{}).filter(([id,s])=>!f||id.toLowerCase().includes(f)||(s.meta.name||"").toLowerCase().includes(f)).forEach(([id,s])=>{
+      body.append(el("tr",{},el("td",{class:"mono"},id),el("td",{},s.meta.name||""),el("td",{},s.meta.unit||""),el("td",{},s.t[s.t.length-1]),el("td",{class:"num"},fmt(s.v[s.v.length-1],2)),el("td",{},s.prov.tier),el("td",{}, s.prov.url?el("a",{href:s.prov.url,target:"_blank",rel:"noopener"},s.prov.source):s.prov.source),el("td",{},s.prov.vintage),el("td",{class:"mono"},s.prov.lineage),el("td",{class:"mono"},s.prov.raw_file)));
+    }); tb.append(body); wrap.append(tb); };
+  q.addEventListener("input", draw); draw();
+  out.push(q, wrap);
+  out.push(el("h2",{},"Structural-break register"));
+  const t3 = el("table"); t3.append(el("thead",{},el("tr",{},...["Id","Date","Series","What","Treatment","Status"].map(h=>el("th",{},h)))));
+  const b3 = el("tbody"); (d.breaks||[]).forEach(b=>b3.append(el("tr",{},el("td",{class:"mono"},b.id),el("td",{},String(b.date)+(b.end?` → ${b.end}`:"")),el("td",{class:"mono"},(b.series||[]).join(", ")),el("td",{},b.what),el("td",{},b.treatment),el("td",{},b.status))));
+  t3.append(b3); out.push(el("div",{class:"tablewrap"},t3));
+  return out;
+}
+
+// ---------------------------------------------------------------- shell
+function render(){
+  state.charts.forEach(c=>c.dispose()); state.charts = [];
+  const d = state.data || {};
+  const meta = d.meta || {};
+  document.getElementById("asof").textContent = meta.built_at ? `Data built ${meta.built_at.replace("T"," ").replace("Z"," UTC")} · ${meta.n_series} series` : "No build yet";
+  document.getElementById("refresh-state").textContent = window.__INLINE_DATA__ ? "Snapshot (data embedded)" : state.lastLoad ? `Checked ${state.lastLoad.toLocaleTimeString()} · auto-refresh every ${REFRESH_MIN} min` : "";
+  const banner = document.getElementById("banner"); banner.textContent = "";
+  const reach = d.source_status?._reachability || {};
+  const down = Object.entries(reach).filter(([k,v])=>!v.ok).map(([k])=>k);
+  const nfb = Object.values(d.catalog||{}).filter(s=>s.prov.tier==="fallback").length;
+  const nfail = (d.validation||[]).filter(v=>v.status==="FAIL");
+  if (nfail.length) banner.append(el("div",{class:"banner",style:"border-color:var(--critical)"}, el("span",{class:"status FAIL"},el("i"),"Validation failures "), ` ${nfail.length} check(s) failed at the last build: values in the affected series may be wrong until fixed. `, el("a",{href:"#",onclick:(e)=>{e.preventDefault();state.tab="validation";render();}},"See Validation"), "."));
+  if (!d.catalog || !Object.keys(d.catalog).length) banner.append(el("div",{class:"banner"}, el("strong",{},"No data in the store yet. "), down.length?`The build environment could not reach: ${down.join(", ")}. Charts fill in when a build can reach the sources.`:"Run the build to populate the store."));
+  else if (down.length || nfb) banner.append(el("div",{class:"banner"}, el("strong",{},"Partial coverage. "), down.length?`Unreachable at last build: ${down.join(", ")}. `:"", nfb?`${nfb} series come from fallback sources and are marked as such.`:""));
+  const tabs = document.getElementById("tabs"); tabs.textContent="";
+  for (const [k,v] of Object.entries(VIEWS)) tabs.append(el("button",{role:"tab","aria-selected":String(state.tab===k),onclick:()=>{state.tab=k; save(); render();}}, v.label));
+  const rg = document.getElementById("range"); rg.textContent="";
+  RANGES.forEach(([l,y])=>rg.append(el("button",{"aria-pressed":String(state.range===y),onclick:()=>{state.range=y; save(); render();}}, l)));
+  const vf = document.getElementById("viewfilters"); vf.textContent="";
+  const view = VIEWS[state.tab] || VIEWS.overview;
+  for (const [k,opts] of Object.entries(view.filters||{})){
+    const cur = state.mode[k] || opts[0][0];
+    const seg = el("span",{class:"seg"}); opts.forEach(([v,l])=>seg.append(el("button",{"aria-pressed":String(cur===v),onclick:()=>{state.mode[k]=v; render();}}, l)));
+    vf.append(seg);
+  }
+  const main = document.getElementById("main"); main.textContent="";
+  let content = view.render();
+  const needsGrid = ["gdp","activity","credit","property","bonds","projects"].includes(state.tab);
+  if (needsGrid){ const g=el("div",{class:"grid"}); content.forEach(c=>g.append(c)); main.append(g); }
+  else content.forEach(c=>main.append(c));
+}
+window.addEventListener("resize", ()=>state.charts.forEach(c=>c.resize()));
+document.getElementById("refresh").addEventListener("click", load);
+document.getElementById("theme").addEventListener("click", ()=>{
+  const root=document.documentElement; const dark = root.dataset.theme ? root.dataset.theme==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark"; render();
+});
+load();
+</script>
+</body>
+</html>

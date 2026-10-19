@@ -1,0 +1,333 @@
+"""Unit tests. Release-text fixtures reproduce the *phrasing* of official releases; their
+numbers are illustrative and are never used as data."""
+import numpy as np
+import pandas as pd
+import pytest
+
+from cetracker import store
+from cetracker.fetch import releases as R
+from cetracker.transform import ytd as Y, seasonal as SA, credit as C, fiscal as F, housing as H
+from cetracker.analytics import classify as K, nowcast as N
+
+
+# ----------------------------------------------------------------- release parsers
+def test_pboc_loans_ytd_block():
+    t = ("2025年8月金融统计数据报告 8月末，广义货币(M2)余额331.98万亿元，同比增长8.8%。狭义货币(M1)余额111.23万亿元，同比增长6%。"
+         "前八个月人民币贷款增加13.46万亿元。分部门看，住户贷款增加3112亿元，其中，短期贷款减少4119亿元，中长期贷款增加7231亿元；"
+         "企（事）业单位贷款增加12.25万亿元，其中，短期贷款增加3.8万亿元，中长期贷款增加6.9万亿元，票据融资增加1.31万亿元；"
+         "非银行业金融机构贷款增加1427亿元。")
+    p = R.pboc_financial_statistics(t)
+    b = p["blocks"][0]
+    assert b["scope"] == "ytd" and b["n"] == 8
+    assert b["hh_short"] == -4119 and b["corp_bills"] == 13100 and b["nbfi_total"] == 1427
+    assert p["m1_yoy"] == 6.0 and p["m2_yoy"] == 8.8
+
+
+def test_mof_month_and_ytd_blocks():
+    t = ("2025年8月，全国发行新增债券5000亿元，其中一般债券600亿元、专项债券4400亿元。全国发行再融资债券3000亿元，"
+         "其中一般债券1000亿元、专项债券2000亿元。2025年1-8月，全国发行新增债券35000亿元，其中一般债券5000亿元、专项债券30000亿元。")
+    p = R.mof_local_bonds(t)
+    m = [b for b in p["blocks"] if b["scope"] == "month"][0]
+    y = [b for b in p["blocks"] if b["scope"] == "ytd"][0]
+    assert m["new_special"] == 4400 and m["refi_total"] == 3000 and y["new_total"] == 35000 and y["n"] == 8
+
+
+def test_tsf_flow_stock_components():
+    t = ("2025年8月末社会融资规模存量为433.66万亿元，同比增长8.8%。2025年前八个月社会融资规模增量累计为26.56万亿元。"
+         "2025年8月社会融资规模增量为2.57万亿元。8月，对实体经济发放的人民币贷款减少465亿元；政府债券净融资1.37万亿元")
+    p = R.pboc_tsf(t)
+    scopes = {b["scope"]: b for b in p["blocks"]}
+    assert scopes["stock"]["tsf_stock_yoy"] == 8.8
+    month = [b for b in p["blocks"] if b["scope"] == "month"]
+    merged = {k: v for b in month for k, v in b.items()}
+    assert merged["tsf_flow"] == 25700 and merged["rmb_loans"] == -465 and round(merged["govt_bonds"]) == 13700
+
+
+def test_ndrc_and_tiers_and_infra():
+    assert R.ndrc_approvals("8月份，共审批核准固定资产投资项目12个，总投资1180亿元")[0]["count"] == 12
+    h = R.nbs_housing_tiers("一线城市新建商品住宅销售价格环比下降0.1%，同比下降1.0%。二线城市新建商品住宅销售价格环比持平，同比下降2.3%。")
+    assert h["tier1_new_mom"] == -0.1 and h["tier2_new_mom"] == 0.0 and h["tier2_new_yoy"] == -2.3
+    f = R.nbs_infra_fai("基础设施投资（不含电力）同比增长2.0%，制造业投资增长5.1%，房地产开发投资同比下降12.9%")
+    assert f == {"infra_ytd_yoy": 2.0, "mfg_ytd_yoy": 5.1, "re_ytd_yoy": -12.9}
+
+
+# ----------------------------------------------------------------- YTD
+def _idx(*m):
+    return pd.to_datetime(list(m)) + pd.offsets.MonthEnd(0)
+
+
+def test_single_month_janfeb_and_gap():
+    ytd = pd.Series([20.0, 30.0, 45.0], _idx("2025-02", "2025-03", "2025-05"))
+    sm, fl = Y.single_month_from_ytd(ytd)
+    assert sm.iloc[0] == 20 and fl.iloc[0] == "janfeb_combined"
+    assert sm.iloc[1] == 10 and np.isnan(sm.iloc[2])        # May follows a missing April: not absorbed
+
+
+def test_comparable_yoy_formula():
+    ytd = pd.Series([200.0, 330.0], _idx("2025-02", "2025-03"))
+    g = pd.Series([10.0, 10.0], _idx("2025-02", "2025-03"))
+    cy = Y.comparable_single_month_yoy(ytd, g)
+    # bases: 200/1.1, 330/1.1 -> March base 118.18; March level 130 -> +10%
+    assert cy.iloc[0] == 10.0 and abs(cy.iloc[1] - 10.0) < 1e-9
+
+
+def test_fill_janfeb():
+    s = pd.Series([5.0, 6.0], _idx("2025-02", "2025-03"))
+    f = Y.fill_janfeb(s)
+    assert f.index[0].month == 1 and f.iloc[0] == 5.0 and len(f) == 3
+
+
+# ----------------------------------------------------------------- seasonal
+def test_cny_dates_in_window():
+    for y, d in SA.cny_dates().items():
+        assert pd.Timestamp(y, 1, 21) <= d <= pd.Timestamp(y, 2, 20)
+
+
+def test_cny_regressors_centred():
+    idx = pd.date_range("2005-01-31", "2030-12-31", freq="ME")   # centring span
+    r = SA.cny_regressors(idx)
+    assert (r.groupby(r.index.month).mean().abs() < 1e-9).all().all()
+    rj = SA.cny_regressors(idx, janfeb_combined=True)
+    assert rj["cny_pre"].std() < 1e-9 and rj["cny_post"].std() > 0
+
+
+def test_x13_recovers_sa():
+    idx = pd.date_range("2012-01-31", "2026-06-30", freq="ME")
+    rng = np.random.default_rng(1)
+    t = np.arange(len(idx))
+    seas = np.tile([-.05, -.15, .02, .01, .02, .04, 0, .01, .03, 0, .02, .05], len(idx) // 12 + 1)[:len(idx)]
+    reg = SA.cny_regressors(idx)
+    logy = 4 + .006 * t + seas + .3 * reg["cny_on"].values + rng.normal(0, .01, len(idx))
+    prim, cross, note = SA.seasonal_adjust(pd.Series(np.exp(logy), idx))
+    err = np.log(prim["sa"].values) - (4 + .006 * t)
+    assert np.std(err) < 0.02, note
+
+
+# ----------------------------------------------------------------- credit / fiscal / housing / classify
+def test_credit_impulse_realtime_gdp():
+    m = pd.date_range("2020-01-31", "2023-12-31", freq="ME")
+    flow = pd.Series(100.0, m)
+    flow[m >= "2022-01-31"] = 200.0
+    gdp = pd.Series(1000.0, pd.date_range("2019-03-31", "2023-12-31", freq="QE"))
+    imp = C.credit_impulse(flow, gdp)
+    # by Dec-2022 the 12m flow rose by 1200 on 4000 annual GDP -> 30%
+    assert abs(imp["2022-12-31"] - 30.0) < 1e-9
+    g = C.gdp_4q_monthly(gdp, pd.DatetimeIndex(["2021-03-31", "2021-04-30"]))
+    assert g.notna().all()
+
+
+def test_bond_classification():
+    assert F.classify_local_bond("2024年XX省政府再融资专项债券（五期）", use_of_proceeds="置换存量隐性债务") == "lg_refi_debt_swap"
+    assert F.classify_local_bond("2025年XX省政府再融资一般债券（一期）") == "lg_refi_regular"
+    assert F.classify_local_bond("2025年XX省政府专项债券（十期）") == "lg_special_new"
+    assert F.classify_central_bond("2025年超长期特别国债（三期）") == "cgb_ultra_long_special"
+    assert F.classify_central_bond("2025年特别国债（一期）") == "cgb_bank_recap_special"
+
+
+def test_tiers_and_aggregate():
+    t = H.tiers()
+    assert [len(t[k]) for k in ("tier1", "tier2", "tier3")] == [4, 31, 35]
+    df = pd.DataFrame({c: [100.5] for c in t["tier1"]}, index=_idx("2025-01"))
+    agg = H.tier_aggregate(df)
+    assert abs(agg["tier1"].iloc[0] - 0.5) < 1e-12 and "tier2" not in agg and agg["all70"].isna().all()
+
+
+def test_six_networks_classifier():
+    assert K.classify("XX抽水蓄能电站项目")[0] == "power_energy"
+    assert K.classify("XX市城市地下综合管廊工程")[0] == "urban_pipes"
+    assert K.classify("XX高速公路扩容")[0] == "transport"
+    assert K.classify("某某综合项目")[0] == "unclassified"
+    m = K.audit_metrics(pd.Series(["water", "transport", "water"]), pd.Series(["water", "water", "water"]))
+    assert m.loc[m.category == "water", "precision"].iloc[0] == pytest.approx(2 / 3)
+
+
+def test_dm_test_sign():
+    rng = np.random.default_rng(0)
+    e_b = rng.normal(0, 2, 80)
+    e_m = rng.normal(0, 1, 80)
+    stat, p = N.dm_test(e_m, e_b)
+    assert stat < 0 and p < 0.05
+
+
+# ----------------------------------------------------------------- store
+def test_store_rejects_untraceable_rows():
+    s = pd.Series([1.0], _idx("2025-01"))
+    bad = store.make_rows("x", s, store.Provenance("NBS", "primary"))
+    with pytest.raises(ValueError):
+        store.validate(bad)
+    bad2 = store.make_rows("x", s, store.Provenance("tracker", "derived"))
+    with pytest.raises(ValueError):
+        store.validate(bad2)
+
+
+def test_title_period():
+    from cetracker.ingest import title_period
+    assert title_period("1—7月份国民经济保持总体平稳", "2026-08-17") == pd.Timestamp("2026-07-31")
+    assert title_period("2025年国民经济回升向好", "2026-01-17") == pd.Timestamp("2025-12-31")
+    assert title_period("前三季度国民经济运行稳中有进", "2026-10-20") == pd.Timestamp("2026-09-30")
+    assert title_period("2026年1—9月份社会消费品零售总额增长1.1%", "2026-10-19") == pd.Timestamp("2026-09-30")
+
+
+def test_tier_interpretation_phrasing():
+    t = ("一线城市新建商品住宅销售价格环比上涨0.1%，涨幅与上月相同。二线城市新建商品住宅销售价格环比由上月下降0.1%转为持平。"
+         "二、三线城市新建商品住宅销售价格同比分别下降2.4%和3.9%，降幅分别收窄。")
+    p = R.nbs_tiers_interpretation(t)
+    assert p["tier1_new_mom"] == 0.1 and p["tier2_new_mom"] == 0.0
+    assert p["tier2_new_yoy"] == -2.4 and p["tier3_new_yoy"] == -3.9
+    # May 2023 release wording: the combined statement with a 由…转为 transition
+    t = ("二、三线城市二手住宅销售价格环比由上月持平分别转为下降0.3%和0.2%。"
+         "二、三线城市新建商品住宅销售价格环比由上月上涨0.1%和0.2%转为持平。")
+    p = R.nbs_tiers_interpretation(t)
+    assert p["tier2_used_mom"] == -0.3 and p["tier3_used_mom"] == -0.2
+    assert p["tier2_new_mom"] == 0.0 and p["tier3_new_mom"] == 0.0
+    t = "7月份，一、二、三线城市二手住宅销售价格同比分别下降1.4%、2.7%和3.5%，降幅比上月分别扩大1.0、0.3和0.1个百分点。"
+    p = R.nbs_tiers_interpretation(t)
+    assert (p["tier1_used_yoy"], p["tier2_used_yoy"], p["tier3_used_yoy"]) == (-1.4, -2.7, -3.5)
+
+
+
+def test_nowcast_per_model_samples():
+    rng = np.random.default_rng(2)
+    idx = pd.date_range("2015-01-31", periods=120, freq="ME")
+    x = pd.Series(rng.normal(size=120), idx)
+    y = pd.Series(0.8 * x.values + rng.normal(0, 0.5, 120), idx)
+    short = x.iloc[-20:]
+    r = N.evaluate(y, {"x": (x, 0), "short": (short, 0)}, {"m_x": ["x"], "m_short": ["short"]}, min_train=48)
+    assert r["models"]["m_x"]["n_oos"] > 50 and r["models"]["m_x"]["beats_ar"]
+    assert "insufficient" in r["models"]["m_short"]["status"]
+
+
+
+def test_lead_lag_no_janfeb_artefact():
+    """Monthly series with January missing: differencing must not create a 2-month change in Feb
+    nor copy it into January (review finding 8)."""
+    from cetracker.analytics import lags
+    idx = pd.date_range("2018-01-31", "2025-12-31", freq="ME")
+    s = pd.Series(np.arange(len(idx), dtype=float), idx)       # +1 every month, nonstationary
+    s = s[s.index.month != 1]
+    d, how = lags.make_stationary(s)
+    assert how == "diff1" and d.dropna().eq(1.0).all() and d[d.index.month.isin([1, 2])].isna().all()
+
+
+def test_period_phrases_quarters_and_annual():
+    assert R.period_scope("前三季度") == ("ytd", 9) and R.period_scope("一季度") == ("ytd", 3)
+    t = ("初步统计,2025年社会融资规模增量累计为35.6万亿元,比上年多3.34万亿元。"
+         "12月末社会融资规模存量为442.12万亿元,同比增长8.3%。")
+    b = {x["scope"]: x for x in R.pboc_tsf(t)["blocks"]}
+    assert b["ytd"]["n"] == 12 and b["ytd"]["tsf_flow"] == 356000.0
+    assert b["stock"]["n"] == 12 and b["stock"]["tsf_stock_yoy"] == 8.3
+    b = R.pboc_tsf("2025年前三季度社会融资规模增量累计为30.09万亿元")["blocks"][0]
+    assert (b["scope"], b["n"], b["tsf_flow"]) == ("ytd", 9, 300900.0)
+
+
+def test_quarter_retail_and_ppi_forms():
+    r = R.nbs_retail("一季度,社会消费品零售总额108659亿元,同比增长3.3%(以下除特殊说明外均为名义增长)。"
+                     "3月份,社会消费品零售总额34233亿元,同比下降3.5%。")
+    assert r["retail.ytd"] == 10865.9 and r["retail.ytd_yoy"] == 3.3 and r["retail.yoy"] == -3.5
+    assert R.nbs_ppi("2026年3月份,全国工业生产者出厂价格同比由上月下降0.9%转为上涨0.5%;环比上涨1.0%")["prices.ppi_yoy"] == 0.5
+    assert R.nbs_ppi("2025年7月份,全国工业生产者出厂价格环比下降0.2%,工业生产者购进价格环比下降0.3%。"
+                     "工业生产者出厂价格同比下降3.6%,工业生产者购进价格同比下降4.5%")["prices.ppi_yoy"] == -3.6
+
+
+def test_own_lag_skips_structural_january():
+    """A January-less NBS target: own lags step over January, other gaps stay gaps, and the ADL
+    sample keeps ~11 of 12 months instead of collapsing."""
+    from cetracker.analytics import lags
+    rng = np.random.default_rng(5)
+    idx = pd.date_range("2021-11-30", "2026-09-30", freq="ME")
+    x = pd.Series(rng.normal(size=len(idx)), idx)
+    y = pd.Series(0.5 * x.shift(1).fillna(0).values + rng.normal(0, 0.3, len(idx)), idx)
+    y[y.index.month == 1] = np.nan
+    y[pd.Timestamp("2024-06-30")] = np.nan                      # a genuine gap
+    l1 = lags.own_lag(y, 1)
+    assert l1[pd.Timestamp("2025-02-28")] == y[pd.Timestamp("2024-12-31")]
+    assert np.isnan(l1[pd.Timestamp("2024-07-31")])
+    assert lags.own_lag(x, 1).equals(x.shift(1))
+    ad = lags.adl(x, y, max_p=2, max_q=3)
+    assert ad["n"] >= 40 and ad["granger_p"] < 0.01
+
+
+def test_money_negative_growth():
+    p = R.pboc_financial_statistics("6月末,广义货币(M2)余额305.02万亿元,同比增长6.2%。狭义货币(M1)余额66.06万亿元,同比下降5%。")
+    assert p["m2_yoy"] == 6.2 and p["m1_yoy"] == -5.0
+
+
+def test_money_table_partial_year():
+    from cetracker.fetch import pboc_tables as PT
+    hdr = "".join(f"<td>2026.{m:02d}</td>" for m in range(1, 13))
+    html = ("<table><tr><td>项目Item</td>" + hdr + "</tr>"
+            "<tr><td>货币和准货币（M2）</td><td>3471860.39</td><td>3492159.91</td></tr>"
+            "<tr><td>Money&amp;Quasi-money</td></tr>"
+            "<tr><td>货币（M1）</td><td>1179680.52</td><td>1159258.82</td></tr></table>")
+    r = PT.money_supply(html)
+    assert r["M2"].dropna().size == 2 and r["M1"].dropna().iloc[-1] == 1159258.82
+
+
+def test_influence_check_rejects_two_point_lead():
+    """Two coincident shocks three months apart must not count as a lead."""
+    from cetracker.analytics import lags
+    rng = np.random.default_rng(11)
+    idx = pd.date_range("2021-01-31", periods=60, freq="ME")
+    x = pd.Series(rng.normal(size=60), idx)
+    y = pd.Series(rng.normal(size=60), idx)
+    x.iloc[10], y.iloc[13] = 8.0, 8.0
+    x.iloc[30], y.iloc[33] = -8.0, -8.0
+    assert pd.concat([x.shift(3), y], axis=1).dropna().corr().iloc[0, 1] > 0.5
+    assert not lags.influence_check(x, y, 3)["significant"]
+    y2 = pd.Series(0.8 * x.shift(3).fillna(0).values + rng.normal(0, 0.5, 60), idx)
+    assert lags.influence_check(x, y2, 3)["significant"]
+
+
+def test_blocks_to_monthly_february_from_january_month_block():
+    from cetracker.ingest import _blocks_to_monthly
+    recs = [(2025, 1, "", {"scope": "month", "n": 1, "tsf_flow": 70600.0}, "r1", "t", "u1", "2025-02-14"),
+            (2025, 2, "", {"scope": "ytd", "n": 2, "tsf_flow": 92900.0}, "r2", "t", "u2", "2025-03-14")]
+    out = _blocks_to_monthly(recs, ["tsf_flow"])["tsf_flow"]
+    feb = [o for o in out if o[0] == pd.Timestamp("2025-02-28")][0]
+    assert feb[1] == 22300.0 and feb[6] == "from_ytd_diff"
+
+
+def test_comparable_base_and_gdp_fill_cap():
+    from cetracker.transform import credit as C
+    idx = pd.date_range("2017-01-31", "2020-12-31", freq="ME")
+    st = pd.Series(np.linspace(100, 200, len(idx)), idx)
+    st[st.index >= "2019-01-31"] += 30                     # definition jump, as in the 2019 table
+    g = pd.Series(10.0, index=idx[idx >= "2018-01-31"])
+    b = C.comparable_base(st, g, "2019-01-31")
+    t = pd.Timestamp("2019-06-30")
+    assert abs(b[t] - st[t] / 1.1) < 1e-9                 # from published y/y, not the old-definition level
+    assert pd.Timestamp("2017-06-30") not in b.index
+    q = pd.Series([10.0, 10, 10, 10], pd.date_range("2023-03-31", periods=4, freq="QE"))
+    m = C.gdp_4q_monthly(q, pd.date_range("2024-01-31", "2024-06-30", freq="ME"))
+    assert m[pd.Timestamp("2024-01-31")] == 40 and m[pd.Timestamp("2024-03-31")] == 40
+    assert np.isnan(m[pd.Timestamp("2024-04-31".replace("31", "30"))])
+
+
+def test_mof_new_bond_wordings():
+    b = R.mof_local_bonds("2022年9月,全国发行新增地方政府债券322亿元,其中一般债券81亿元、专项债券241亿元。"
+                          "全国发行再融资债券2689亿元,其中一般债券1723亿元、专项债券966亿元。")["blocks"][0]
+    assert (b["new_total"], b["new_general"], b["new_special"], b["refi_total"]) == (322.0, 81.0, 241.0, 2689.0)
+    b = R.mof_local_bonds("2020年1月,全国发行地方政府债券7850.64亿元。其中,发行一般债券702.43亿元,"
+                          "发行专项债券7148.21亿元;按用途划分,全部为新增债券。")["blocks"][0]
+    assert b["new_total"] == 7850.64 and b["refi_total"] == 0.0 and b["new_special"] == 7148.21
+    b = R.mof_local_bonds("2021年2月,全国发行地方政府债券557亿元。其中,发行一般债券295亿元,发行专项债券262亿元;"
+                          "按用途划分,全部为再融资债券。")["blocks"][0]
+    assert b["new_total"] == 0.0 and b["refi_total"] == 557.0 and b["refi_general"] == 295.0
+
+
+def test_gdp_prelim_tables():
+    t = ("经初步核算，我国 2023 年一季度 GDP 核算结果如下。 表 1 2023 年一季度 GDP 初步核算数据 绝对额（亿元） "
+         "比上年同期增长（ % ） GDP 284997 4.5 第一产业 11575 3.7 第二产业 107947 3.3 第三产业 165475 5.4 注： 1. … "
+         "表 2 GDP 同比增长速度 单位： % 年份 1 季度 2 季度 3 季度 4 季度 2022 4.8 0.4 3.9 2.9 2023 4.5 注：同比… "
+         "表 3 GDP 环比增长速度 单位： % 年份 1 季度 2 季度 3 季度 4 季度 2022 0.8 -2.3 3.9 0.6 2023 2.2 注：环比…")
+    g = R.nbs_gdp_prelim(t)
+    assert g["current"]["ytd_nominal"] == 28499.7 and g["current"]["q_real_yoy"] == 4.5
+    assert g["current"]["s3_ytd_real_yoy"] == 5.4
+    assert g["real_yoy"][(2022, 4)] == 2.9 and g["real_yoy"][(2023, 1)] == 4.5
+    assert g["sa_qoq"][(2022, 2)] == -2.3 and (2023, 2) not in g["sa_qoq"]
+    t2 = ("表 1 2022 年二季度和上半年 GDP 初步核算数据 绝对额（亿元） 比上年同期增长（ % ） 二季度 上半年 二季度 上半年 "
+          "GDP 292464 562642 0.4 2.5 第一产业 18183 29137 4.4 5.0 注：")
+    c = R.nbs_gdp_prelim(t2)["current"]
+    assert (c["q_nominal"], c["ytd_nominal"], c["q_real_yoy"], c["ytd_real_yoy"]) == (29246.4, 56264.2, 0.4, 2.5)
+    q1 = R.nbs_gdp("初步核算,一季度国内生产总值296299亿元,按不变价格计算,同比增长5.3%,比上年四季度环比增长1.6%。")
+    assert q1["q_real_yoy"] == 5.3 and q1["q_sa_qoq"] == 1.6 and q1["q_index"] == 1

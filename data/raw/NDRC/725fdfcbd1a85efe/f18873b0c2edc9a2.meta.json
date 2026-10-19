@@ -1,0 +1,11 @@
+{
+ "url": "https://www.ndrc.gov.cn/xwdt/xwfb/201906/W020190905389179060635.docx",
+ "request_url": "https://www.ndrc.gov.cn/xwdt/xwfb/201906/W020190905389179060635.docx",
+ "params": null,
+ "data": null,
+ "method": "GET",
+ "status": 200,
+ "first_retrieved_at": "2026-10-19T03:13:21Z",
+ "bytes": 32578,
+ "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+}

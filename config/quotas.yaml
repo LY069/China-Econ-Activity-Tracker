@@ -1,0 +1,46 @@
+# Annual NPC budget quotas (RMB bn). Denominators for "issuance pace vs quota".
+# source_tier: manual -> transcribed from the Government Work Report / MOF budget report.
+# verified: true only once checked against the primary document (gov.cn / mof.gov.cn).
+# Where a value is not yet verified against the primary text it is still used, but the
+# app shows the quota as "unverified" next to every pace chart that relies on it.
+2023:
+  cgb_deficit: 3160          # central deficit; +1000 additional CGB approved Oct 2023 (see extra)
+  lg_general_new: 720
+  lg_special_new: 3800
+  ultra_long_special_cgb: 0
+  bank_recap_special_cgb: 0
+  extra: {additional_cgb_q4: 1000}
+  source_url: https://www.gov.cn/zhuanti/2023lhzfgzbg/index.htm
+  verified: false
+2024:
+  cgb_deficit: 3340
+  lg_general_new: 720
+  lg_special_new: 3900
+  ultra_long_special_cgb: 1000
+  bank_recap_special_cgb: 0
+  # Nov-2024 NPCSC: +6000 refinancing special-bond quota for hidden-debt swap, 2000/yr 2024-26
+  debt_swap_refinancing: 2000
+  source_url: https://www.gov.cn/zhuanti/2024lhzfgzbg/index.htm
+  verified: false
+2025:
+  cgb_deficit: 4860
+  lg_general_new: 800
+  lg_special_new: 4400
+  ultra_long_special_cgb: 1300
+  bank_recap_special_cgb: 500
+  debt_swap_refinancing: 2000
+  # of new special bonds, 800/yr (2024-2028) may be used to swap hidden debt
+  special_new_earmarked_swap: 800
+  source_url: https://www.gov.cn/zhuanti/2025lhzfgzbg/index.htm
+  verified: false
+2026:
+  total_deficit: 5890        # 4% of GDP; CGB vs LG-general split to be read from MOF budget report
+  cgb_deficit: null
+  lg_general_new: null
+  lg_special_new: 4400
+  ultra_long_special_cgb: 1300
+  bank_recap_special_cgb: 300
+  debt_swap_refinancing: 2000
+  special_new_earmarked_swap: 800
+  source_url: https://www.jiemian.com/article/14088678.html   # press report of GWR (secondary)
+  verified: false

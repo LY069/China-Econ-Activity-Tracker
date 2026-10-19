@@ -1,0 +1,106 @@
+name: refresh-data
+
+# Runs the full pipeline on GitHub's runners (open internet), commits the updated store,
+# derived data, validation report and app JSON, and publishes site/ to GitHub Pages.
+on:
+  schedule:
+    # 02:20 and 10:20 UTC daily (10:20/18:20 Beijing): after NBS (10:00 BJT) and PBoC/MOF releases
+    - cron: "20 2,10 * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [main, "claude/**"]
+    paths: ["cetracker/**", "config/**", ".github/workflows/refresh.yml", "requirements.txt"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Unit and integration tests
+        run: python -m pytest -q
+      - name: Source reachability from the runner
+        run: |
+          for u in https://data.stats.gov.cn/ https://www.stats.gov.cn/ https://www.pbc.gov.cn/ https://www.mof.gov.cn/ https://yss.mof.gov.cn/ https://www.ndrc.gov.cn/ https://www.chinabond.com.cn/ https://www.celma.org.cn/; do
+            echo "$(curl -s -o /dev/null -w '%{http_code}' -m 20 -A 'Mozilla/5.0' "$u") $u"; done
+      - name: Build (fetch, derive, analyse, validate, export)
+        run: python -m cetracker.build
+      - name: Fail if the store is empty
+        run: |
+          python - <<'PY'
+          import json, sys
+          m = json.load(open("site/data/meta.json"))
+          print("rows:", m["n_rows"], "series:", m["n_series"])
+          sys.exit(1 if m["n_rows"] == 0 else 0)
+          PY
+      - name: Fail on FAIL-status validation checks
+        run: |
+          python - <<'PY'
+          import json, sys
+          v = json.load(open("site/data/validation.json"))
+          bad = [x["id"] for x in v if x["status"] == "FAIL"]
+          print("FAIL checks:", bad)
+          sys.exit(1 if bad else 0)
+          PY
+      - name: Commit data
+        if: always()
+        env:
+          JOB_OK: ${{ job.status == 'success' }}
+        run: |
+          git config user.name "tracker-bot"
+          git config user.email "tracker-bot@users.noreply.github.com"
+          if [ "$JOB_OK" = "true" ]; then
+            git add data/ site/ docs/validation_report.md
+          else
+            # a failed build (FAIL check, crash) keeps only the raw archive: the store and the app data
+            # stay at the last good build, and the fetched bytes remain available for --replay
+            echo "::warning::build failed; committing the raw archive only"
+            git add data/raw/
+          fi
+          # [skip ci] stops the data commit from re-triggering this workflow
+          git diff --cached --quiet && exit 0
+          git commit -m "Data refresh $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
+          # drop what was not committed (a failed build's store and app data) so the rebase can run
+          git reset -q --hard HEAD && git clean -fdq
+          # rebase onto anything pushed while the build ran (code pushes, other runs), then push
+          for i in 1 2 3 4; do
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            # data built by superseded code must not land: the newer push runs its own refresh
+            if ! git diff --quiet "${GITHUB_SHA}" FETCH_HEAD -- cetracker config requirements.txt; then
+              echo "::notice::pipeline code changed on ${GITHUB_REF_NAME} since this run started; discarding this run's data"
+              exit 0
+            fi
+            git rebase -X theirs FETCH_HEAD && git push origin HEAD:"${GITHUB_REF_NAME}" && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          exit 1
+      # publish the app only when every step (including the FAIL gate) succeeded
+      - uses: actions/upload-pages-artifact@v3
+        if: success() && github.ref == 'refs/heads/main'
+        with:
+          path: site
+  deploy:
+    needs: refresh
+    if: success() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

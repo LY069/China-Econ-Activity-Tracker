@@ -1,0 +1,213 @@
+{
+ "pboc_tsf_2025": {
+  "status": 200,
+  "bytes": 25944,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570885/index.html"
+ },
+ "pboc_tsf_2025_rows": [
+  [
+   "社会融资规模增量统计表 Aggregate Financing to the Real Economy (Flow) htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/02/2026021416101512219.htm"
+  ],
+  [
+   "社会融资规模存量统计表 Aggregate Financing to the Real Economy (Stock) htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/02/2026021416101539242.htm"
+  ]
+ ],
+ "pboc_tsf_2025_t0": {
+  "status": 200,
+  "bytes": 56728,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/02/2026021416101512219.htm"
+ },
+ "pboc_tsf_2025_t1": {
+  "status": 200,
+  "bytes": 57555,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/02/2026021416101539242.htm"
+ },
+ "pboc_tsf_2016": {
+  "status": 200,
+  "bytes": 26042,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013639/index.html"
+ },
+ "pboc_tsf_2016_rows": [
+  [
+   "社会融资规模增量统计表 Aggregate Financing to the Real Economy (Flow) htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2018/04/2018041118065466576.htm"
+  ],
+  [
+   "社会融资规模存量统计表 Aggregate Financing to the Real Economy (Stock) htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2018/04/2018041118085441632.htm"
+  ]
+ ],
+ "pboc_tsf_2016_t0": {
+  "status": 200,
+  "bytes": 51845,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2018/04/2018041118065466576.htm"
+ },
+ "pboc_tsf_2016_t1": {
+  "status": 200,
+  "bytes": 69781,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/fileDir/resource/cms/2018/04/2018041118085441632.htm"
+ },
+ "pboc_tsf_2026": {
+  "status": 200,
+  "bytes": 26144,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/2026ntjsj/shrzgm/index.html"
+ },
+ "pboc_tsf_2026_rows": [
+  [
+   "社会融资规模增量统计表 Aggregate Financing to the Real Economy (Flow) htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/10/2026101417443343908.htm"
+  ],
+  [
+   "社会融资规模存量统计表 Aggregate Financing to the Real Economy (Stock) htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/10/2026101417444554195.htm"
+  ]
+ ],
+ "pboc_tsf_2026_t0": {
+  "status": 200,
+  "bytes": 55824,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/10/2026101417443343908.htm"
+ },
+ "pboc_tsf_2026_t1": {
+  "status": 200,
+  "bytes": 57401,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/10/2026101417444554195.htm"
+ },
+ "pboc_money_2025": {
+  "status": 200,
+  "bytes": 31447,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570886/index.html"
+ },
+ "pboc_money_2025_rows": [
+  [
+   "官方储备资产 Official reserve assets htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026010715590077987.htm"
+  ],
+  [
+   "货币当局资产负债表 Balance Sheet of Monetary Authority htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582620291.htm"
+  ],
+  [
+   "存款性公司概览 Depository Corporations Survey htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582667667.htm"
+  ],
+  [
+   "其他存款性公司资产负债表 Balance Sheet of Other Depository Corporations htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582689608.htm"
+  ],
+  [
+   "货币供应量 Money Supply htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582640595.htm"
+  ],
+  [
+   "汇率报表 Exchange Rate htm xls pdf",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582626766.htm"
+  ],
+  [
+   "境外机构和个人持有境内人民币金融资产情况 Domestic RMB Financial Assets Held by Overseas Entities htm",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026013015572983846.htm"
+  ]
+ ],
+ "pboc_money_2025_t4": {
+  "status": 200,
+  "bytes": 57355,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011515582640595.htm"
+ },
+ "pboc_credit_2025": {
+  "status": 200,
+  "bytes": 31325,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/5570903/5570888/index.html"
+ },
+ "pboc_credit_2025_rows": [
+  [
+   "金融机构本外币信贷收支表 Sources & Uses of Credit Funds of Financial Institutions (in RMB an",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516024288235.htm"
+  ],
+  [
+   "存款类金融机构本外币信贷收支表 Sources & Uses of Credit Funds of Depository Financial Instituti",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516032041572.htm"
+  ],
+  [
+   "金融机构外汇信贷收支表 Sources & Uses of Credit Funds of Financial Institutions (in Foreign",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516034915919.htm"
+  ],
+  [
+   "存款类金融机构外汇信贷收支表 Sources & Uses of Credit Funds of Depository Financial Institutio",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516045792644.htm"
+  ],
+  [
+   "金融机构人民币信贷收支表 Sources & Uses of Credit Funds of Financial Institutions (RMB) htm ",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516053141218.htm"
+  ],
+  [
+   "存款类金融机构人民币信贷收支表 Sources & Uses of Credit Funds of Depository Financial Instituti",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516060366702.htm"
+  ],
+  [
+   "中资全国性大型银行人民币信贷收支表 Sources & Uses of Credit Funds of large-sized State-owned Nati",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516063437392.htm"
+  ],
+  [
+   "中资全国性四家大型银行人民币信贷收支表 Sources & Uses of Credit Funds of 4 largest State-owned Nati",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516074575038.htm"
+  ],
+  [
+   "中资全国性中小型银行人民币信贷收支表 Sources & Uses of Credit Funds of medium & small-sized State-",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516081797196.htm"
+  ]
+ ],
+ "pboc_credit_2025_t4": {
+  "status": 200,
+  "bytes": 76213,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2026/01/2026011516053141218.htm"
+ },
+ "pboc_credit_2016": {
+  "status": 200,
+  "bytes": 31250,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/3013637/3013643/index.html"
+ },
+ "pboc_credit_2016_rows": [
+  [
+   "金融机构本外币信贷收支表 Sources & Uses of Credit Funds of Financial Institutions (in RMB an",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811174754177.htm"
+  ],
+  [
+   "存款类金融机构本外币信贷收支表 Sources & Uses of Credit Funds of Depository Financial Instituti",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811185552239.htm"
+  ],
+  [
+   "金融机构外汇信贷收支表 Sources & Uses of Credit Funds of Financial Institutions (in Foreign",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811194742476.htm"
+  ],
+  [
+   "存款类金融机构外汇信贷收支表 Sources & Uses of Credit Funds of Depository Financial Institutio",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811203352117.htm"
+  ],
+  [
+   "金融机构人民币信贷收支表 Sources & Uses of Credit Funds of Financial Institutions (RMB) htm ",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811261149897.htm"
+  ],
+  [
+   "存款类金融机构人民币信贷收支表 Sources & Uses of Credit Funds of Depository Financial Instituti",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811272516817.htm"
+  ],
+  [
+   "中资全国性大型银行人民币信贷收支表 Sources & Uses of Credit Funds of large-sized State-owned Nati",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811282876418.htm"
+  ],
+  [
+   "中资全国性四家大型银行人民币信贷收支表 Sources & Uses of Credit Funds of 4 largest State-owned Nati",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811291951768.htm"
+  ],
+  [
+   "中资全国性中小型银行人民币信贷收支表 Sources & Uses of Credit Funds of medium & small-sized State-",
+   "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811303119728.htm"
+  ]
+ ],
+ "pboc_credit_2016_t4": {
+  "status": 200,
+  "bytes": 89943,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/attachDir/2025/11/2025111811261149897.htm"
+ }
+}
