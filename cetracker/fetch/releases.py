@@ -211,10 +211,65 @@ def nbs_infra_fai(text: str) -> dict:
     """NBS FAI release: YTD y/y (%) for infrastructure / manufacturing / real estate investment."""
     t = _clean(text)
     out = {}
-    for cn, k in [(r"基础设施投资(?:\(不含电力\))?", "infra_ytd_yoy"), ("制造业投资", "mfg_ytd_yoy"),
+    for cn, k in [(r"基础设施投资(?:\([^)]{0,20}\))?", "infra_ytd_yoy"), ("制造业投资", "mfg_ytd_yoy"),
                   ("房地产开发投资", "re_ytd_yoy")]:
         mm = re.search(cn + r"(?:同比)?(增长|下降)" + NUM + "%", t)
         if mm:
             v = float(mm.group(2))
             out[k] = -v if mm.group(1) == "下降" else v
     return out
+
+
+def nbs_70city_tables(html: str) -> dict:
+    """City-level indices from the NBS monthly 70-city release HTML.
+
+    Uses 表1 (new commercial residential) and 表2 (second-hand residential): each row holds two
+    cities, columns [city, m/m (prev=100), y/y (same month last year=100), YTD avg] x 2.
+    Returns {"new": {city: (mom, yoy)}, "used": {...}}. Tables are identified by their
+    caption text in document order, not by position.
+    """
+    from bs4 import BeautifulSoup
+
+    from ..transform.housing import tiers
+
+    known = set(sum(tiers().values(), []))
+    soup = BeautifulSoup(html, "lxml")
+    out = {}
+    for tbl in soup.find_all("table"):
+        # caption text is split across several nodes: gather the ~120 characters before the table
+        parts, n = [], 0
+        for st in tbl.find_all_previous(string=True):
+            parts.append(str(st))
+            n += len(str(st).strip())
+            if n > 120:
+                break
+        cap = re.sub(r"\s+", "", "".join(reversed(parts)))
+        cap = cap[cap.rfind("表"):] if "表" in cap else cap
+        seg = "new" if "新建商品住宅" in cap else "used" if "二手住宅" in cap else None
+        if seg is None or seg in out:
+            continue
+        rows = [[re.sub(r"[\s\u3000]+", "", c.get_text()) for c in tr.find_all(["td", "th"])] for tr in tbl.find_all("tr")]
+        # each row holds two cities; columns per city = 4 (m/m, y/y, YTD avg) or 3 in January
+        data = {}
+        num = re.compile(r"\d+(\.\d+)?")
+        for r in rows:
+            if len(r) not in (6, 8) or not r[0] or num.fullmatch(r[0]):
+                continue
+            step = len(r) // 2
+            for k in (0, step):
+                city, mom, yoy = r[k], r[k + 1], r[k + 2]
+                if city in known and num.fullmatch(mom) and num.fullmatch(yoy):
+                    data[city] = (float(mom), float(yoy))
+        if len(data) >= 60:
+            out[seg] = data
+    return out
+
+
+def nbs_fai_total(text: str):
+    """(YTD level in RMB bn, YTD y/y %) from '固定资产投资（不含农户）293092亿元，同比下降7.2%'."""
+    t = _clean(text)
+    mm = re.search(r"固定资产投资\(不含农户\)" + NUM + r"亿元,(?:比上年|同比)(增长|下降)" + NUM + "%", t)
+    if not mm:
+        return None
+    g = float(mm.group(3))
+    return float(mm.group(1)) / 10, (-g if mm.group(2) == "下降" else g)

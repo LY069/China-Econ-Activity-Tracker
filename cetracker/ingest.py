@@ -103,12 +103,17 @@ def ingest_nbs_70city(start: str = "2011-") -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------ release-text crawlers
-def crawl(source: str, list_url: str, title_rx: str, pages: int = 10, page_fmt: str = "index_{n}.html") -> list[dict]:
-    """Collect {title, url, date} of releases whose link text matches title_rx."""
+def crawl(source: str, list_url: str, title_rx: str, pages: int = 10, page_fmt: str = "index_{n}.html",
+          page_offset: int = 0, stop_when_empty: bool = False) -> list[dict]:
+    """Collect {title, url, date} of releases whose link text matches title_rx.
+
+    Page n >= 1 is list_url joined with page_fmt.format(n=n + page_offset) (PBoC numbers its
+    second page 2, NBS/MOF/NDRC number it 1). Crawling stops at the first missing page.
+    """
     out, seen = [], set()
     rx = re.compile(title_rx)
     for n in range(pages):
-        url = list_url if n == 0 else urljoin(list_url, page_fmt.format(n=n))
+        url = list_url if n == 0 else urljoin(list_url, page_fmt.format(n=n + page_offset))
         try:
             content, _, _ = fetch(source, url, ext="html", retries=2)
         except FetchError:
@@ -127,8 +132,30 @@ def crawl(source: str, list_url: str, title_rx: str, pages: int = 10, page_fmt: 
             m = re.search(r"t(20\d{6})", full)
             out.append({"title": title, "url": full, "date": f"{m.group(1)[:4]}-{m.group(1)[4:6]}-{m.group(1)[6:]}" if m else ""})
             found += 1
-        if found == 0 and n > 0:
+        if stop_when_empty and found == 0 and n > 0:
             break
+    return out
+
+
+def docx_text(content: bytes) -> str:
+    """Plain text of a .docx (paragraph per line) using only the standard library."""
+    import io
+    import zipfile
+
+    xml = zipfile.ZipFile(io.BytesIO(content)).read("word/document.xml").decode("utf-8", errors="replace")
+    paras = re.findall(r"<w:p[ >].*?</w:p>", xml, flags=re.S)
+    return "\n".join(re.sub(r"<[^>]+>", "", p) for p in paras)
+
+
+def attachments(source: str, url: str, label_rx: str = r"实录") -> list[str]:
+    """Absolute URLs of .docx/.doc attachments on a release page whose link text matches label_rx."""
+    content, _, _ = fetch(source, url, ext="html")
+    soup = BeautifulSoup(content.decode("utf-8", errors="replace"), "lxml")
+    out = []
+    for a in soup.find_all("a"):
+        h = a.get("href") or ""
+        if h.lower().endswith((".docx",)) and re.search(label_rx, a.get_text() or ""):
+            out.append(urljoin(url, h))
     return out
 
 
@@ -193,13 +220,18 @@ def ingest_pboc(pages: int = 40) -> pd.DataFrame:
     rows = []
     try:
         lst = crawl("PBoC", "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
-                    r"(\d{4})年(\d{1,2})月(金融统计数据报告|社会融资规模增量统计数据报告)", pages=pages,
-                    page_fmt="index{n}.html")
+                    r"(\d{4})年(\d{1,2}月|一季度|上半年|前三季度|全年)(金融统计数据报告|社会融资规模增量统计数据报告)",
+                    pages=pages, page_fmt="11040-{n}.html", page_offset=1)
         if not lst:
             raise LookupError("no PBoC releases found on list pages")
         loan_recs, tsf_recs, money = [], [], []
+        item_errors = []
         for item in lst:
-            text, raw, ts, pub = release_text("PBoC", item["url"])
+            try:
+                text, raw, ts, pub = release_text("PBoC", item["url"])
+            except FetchError as e:
+                item_errors.append(str(e)[:160])
+                continue
             pub = pub or item["date"]
             if "社会融资规模" in item["title"]:
                 p = releases.pboc_tsf(text)
@@ -230,7 +262,7 @@ def ingest_pboc(pages: int = 40) -> pd.DataFrame:
             for k in ("m1_yoy", "m2_yoy"):
                 prov = store.Provenance("PBoC", "primary", url, raw, ts, pub or ts[:10], lineage=f"release_text:{k}")
                 rows.append(store.make_rows(f"money.{k}", pd.Series([p[k]], index=[per]), prov))
-        _status("PBoC releases", bool(rows), releases=len(lst))
+        _status("PBoC releases", bool(rows), releases=len(lst), item_errors=item_errors)
     except Exception as e:
         _status("PBoC releases", False, error=f"{type(e).__name__}: {str(e)[:300]}")
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
@@ -243,9 +275,13 @@ def ingest_mof_lgb(pages: int = 15) -> pd.DataFrame:
                     r"(\d{4})年(\d{1,2})月(份)?地方政府债券发行和债务余额情况", pages=pages, page_fmt="index_{n}.htm")
         if not lst:
             raise LookupError("no MOF local-bond releases found")
-        recs = []
+        recs, item_errors = [], []
         for item in lst:
-            text, raw, ts, pub = release_text("MOF", item["url"])
+            try:
+                text, raw, ts, pub = release_text("MOF", item["url"])
+            except FetchError as e:
+                item_errors.append(str(e)[:160])
+                continue
             p = releases.mof_local_bonds(text)
             for b in p.get("blocks", []):
                 recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub or item["date"]))
@@ -254,7 +290,7 @@ def ingest_mof_lgb(pages: int = 15) -> pd.DataFrame:
                    "total": "lgb.total", "redemption": "lgb.redemption", "swap_refi": "lgb.refi_debt_swap",
                    "refi_general": "lgb.refi_general", "refi_special": "lgb.refi_special"}
         rows += _rows_from_fields(_blocks_to_monthly(recs, fields), mapping, "MOF", "primary")
-        _status("MOF local bonds", bool(rows), releases=len(lst))
+        _status("MOF local bonds", bool(rows), releases=len(lst), item_errors=item_errors)
     except Exception as e:
         _status("MOF local bonds", False, error=f"{type(e).__name__}: {str(e)[:300]}")
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
@@ -266,8 +302,21 @@ def ingest_ndrc(pages: int = 30) -> pd.DataFrame:
         lst = crawl("NDRC", "https://www.ndrc.gov.cn/xwdt/xwfb/", r"新闻发布会", pages=pages)
         if not lst:
             raise LookupError("no NDRC press-conference transcripts found")
+        item_errors, n_docx = [], 0
         for item in lst:
-            text, raw, ts, pub = release_text("NDRC", item["url"])
+            try:
+                text, raw, ts, pub = release_text("NDRC", item["url"])
+                src_url = item["url"]
+                # the full transcript is a .docx attachment ("发布会实录"); the page is a summary
+                for att in attachments("NDRC", item["url"]):
+                    content, raw, ts = fetch("NDRC", att, ext="docx")
+                    text = docx_text(content)
+                    src_url = att
+                    n_docx += 1
+                    break
+            except Exception as e:
+                item_errors.append(f"{item['url']}: {str(e)[:160]}")
+                continue
             pub = pub or item["date"]
             if not pub:
                 continue
@@ -280,44 +329,85 @@ def ingest_ndrc(pages: int = 30) -> pd.DataFrame:
                 mth = int(m.group(2))
                 yr = int(m.group(1)) if m.group(1) else (pubd.year if mth <= pubd.month else pubd.year - 1)
                 per = _month_end(yr, mth)
-                prov = store.Provenance("NDRC", "primary", item["url"], raw, ts, pub, lineage="release_text:ndrc_approvals")
+                prov = store.Provenance("NDRC", "primary", src_url, raw, ts, pub, lineage="release_text:ndrc_approvals")
                 rows.append(store.make_rows("ndrc.approvals_count", pd.Series([hit["count"]], index=[per]), prov))
                 rows.append(store.make_rows("ndrc.approvals_value", pd.Series([hit["investment_yi"] / 10], index=[per]), prov))
-        _status("NDRC approvals", bool(rows), transcripts=len(lst), months=len(rows) // 2)
+        _status("NDRC approvals", bool(rows), transcripts=len(lst), docx=n_docx, months=len(rows) // 2,
+                item_errors=item_errors[:20])
     except Exception as e:
         _status("NDRC approvals", False, error=f"{type(e).__name__}: {str(e)[:300]}")
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
 
 
-def ingest_nbs_release_texts(pages: int = 20) -> pd.DataFrame:
-    """NBS release texts: infrastructure FAI growth and tier housing commentary (for validation)."""
-    rows = []
+def ingest_nbs_release_texts(pages: int = 160) -> pd.DataFrame:
+    """NBS monthly releases (www.stats.gov.cn/sj/zxfb): the primary NBS route, because the NBS
+    data portal refuses cloud IPs (HTTP 403). Parsed per release type:
+
+        70个大中城市...变动情况   city-level new / second-hand indices from 表1 / 表2
+        全国固定资产投资          FAI YTD level and y/y, infrastructure / manufacturing / RE y/y
+    plus the release-type parsers registered in RELEASE_PARSERS (activity, prices, property).
+    """
+    rows, item_errors, counts = [], [], defaultdict(int)
     try:
-        lst = crawl("NBS", "https://www.stats.gov.cn/sj/zxfb/",
-                    r"(全国固定资产投资|70个大中城市)", pages=pages)
+        lst = crawl("NBS", "https://www.stats.gov.cn/sj/zxfb/", r"20\d\d年", pages=pages)
         for item in lst:
-            text, raw, ts, pub = release_text("NBS", item["url"])
-            pub = pub or item["date"]
             m = re.search(r"(\d{4})年(?:1[—\-–])?(\d{1,2})月", item["title"])
-            if not m:
+            kind = next((k for k, (rx, _) in RELEASE_PARSERS.items() if re.search(rx, item["title"])), None)
+            if not m or kind is None:
                 continue
+            try:
+                content, raw, ts = fetch("NBS", item["url"], ext="html")
+            except FetchError as e:
+                item_errors.append(str(e)[:160])
+                continue
+            html = content.decode("utf-8", errors="replace")
             per = _month_end(int(m.group(1)), int(m.group(2)))
-            prov = store.Provenance("NBS", "primary", item["url"], raw, ts, pub or ts[:10], lineage="release_text")
-            if "固定资产投资" in item["title"]:
-                p = releases.nbs_infra_fai(text)
-                if "infra_ytd_yoy" in p:
-                    rows.append(store.make_rows("fai.infra_ytd_yoy", pd.Series([p["infra_ytd_yoy"]], index=[per]), prov))
-            else:
-                p = releases.nbs_housing_tiers(text)
-                for k, v in p.items():
-                    if k in ("year", "month"):
-                        continue
-                    tier, seg, h = k.split("_")
-                    rows.append(store.make_rows(f"nbs_text.hp.{seg}.{tier}.{h}", pd.Series([v], index=[per]), prov))
-        _status("NBS release texts", bool(rows), releases=len(lst))
+            prov = store.Provenance("NBS", "primary", item["url"], raw, ts, item["date"] or ts[:10],
+                                    lineage=f"release_text:{kind}")
+            try:
+                vals = RELEASE_PARSERS[kind][1](html)
+            except Exception as e:
+                item_errors.append(f"{item['url']}: parse {type(e).__name__}: {str(e)[:120]}")
+                continue
+            for sid, v in vals.items():
+                rows.append(store.make_rows(sid, pd.Series([v], index=[per]), prov))
+            counts[kind] += 1
+        _status("NBS releases", bool(rows), releases_listed=len(lst), parsed=dict(counts), item_errors=item_errors[:20])
     except Exception as e:
-        _status("NBS release texts", False, error=f"{type(e).__name__}: {str(e)[:300]}")
+        _status("NBS releases", False, error=f"{type(e).__name__}: {str(e)[:300]}")
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
+
+
+def _text(html: str) -> str:
+    soup = BeautifulSoup(html, "lxml")
+    for t in soup(["script", "style"]):
+        t.decompose()
+    return soup.get_text("\n")
+
+
+def _parse_70city(html: str) -> dict:
+    out = {}
+    for seg, cities in releases.nbs_70city_tables(html).items():
+        for city, (mom, yoy) in cities.items():
+            out[f"city70.{seg}.mom.{city}"] = mom
+            out[f"city70.{seg}.yoy.{city}"] = yoy
+    return out
+
+
+def _parse_fai(html: str) -> dict:
+    t = _text(html)
+    p = releases.nbs_infra_fai(t)
+    out = {f"fai.{k}": v for k, v in p.items()}
+    lv = releases.nbs_fai_total(t)
+    if lv:
+        out["fai.ytd"], out["fai.ytd_yoy"] = lv
+    return out
+
+
+RELEASE_PARSERS = {
+    "70city": (r"70个大中城市.*销售价格变动", _parse_70city),
+    "fai": (r"全国固定资产投资", _parse_fai),
+}
 
 
 PROBES = {
@@ -338,7 +428,7 @@ def run_all() -> pd.DataFrame:
         ok, msg = reachable(url)
         STATUS.setdefault("_reachability", {})[name] = {"url": url, "ok": ok, "detail": msg}
     frames = []
-    for fn in (ingest_nbs, ingest_nbs_70city, ingest_nbs_release_texts, ingest_pboc, ingest_mof_lgb, ingest_ndrc):
+    for fn in (ingest_nbs, ingest_nbs_release_texts, ingest_pboc, ingest_mof_lgb, ingest_ndrc):
         try:
             frames.append(fn())
         except Exception:
