@@ -132,6 +132,8 @@ for k, n in [("loans.total", "New RMB loans, total"), ("loans.hh_total", "Househ
     reg(k, n, "RMB bn", "M", "Credit", "flow", pboc="loans")
 
 reg("money.m0", "M0, end-period", "RMB bn", "M", "Credit", "stock")
+reg("money.m1_restated", "M1 2024 restated on the Jan-2025 definition (PBoC)", "RMB bn", "M", "Credit", "stock")
+reg("tsf.lg_special_bonds", "TSF: local-government special bonds (2018 definition)", "RMB bn", "M", "Credit", "flow")
 reg("tsf.govt_bonds_stock", "TSF stock: government bonds", "RMB bn", "M", "Credit", "stock")
 for k in ("total", "hh_total", "hh_short", "hh_medlong", "corp_total", "corp_short", "corp_medlong", "corp_bills",
           "corp_leases", "corp_advances", "nbfi"):
@@ -171,7 +173,14 @@ for seg, segn in [("new", "new commercial residential"), ("used", "second-hand r
     reg(f"hp.{seg}.breadth_down", f"Cities with m/m decline ({segn})", "cities of 70", "M", "Property", "count", city70=seg)
 
 
+IMPULSE_NOTE = "Δ12m of 12-month flow, % of TSF stock 12 months earlier (GDP-free)"
+
+
 def meta(sid: str) -> dict:
+    if sid.endswith("~impulse_stk"):
+        base = S.get(sid.split("~")[0], {"name": sid})
+        return {"id": sid, "name": f"{base['name']}: impulse (% of TSF stock)", "unit": "%", "freq": "M",
+                "group": base.get("group", "Credit"), "kind": "impulse", "note": IMPULSE_NOTE}
     if sid in S:
         return S[sid]
     base = sid.split("~")[0]

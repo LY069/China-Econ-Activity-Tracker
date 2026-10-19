@@ -233,12 +233,19 @@ def ingest_pboc(pages: int = 120) -> pd.DataFrame:
                 item_errors.append(str(e)[:160])
                 continue
             pub = pub or item["date"]
+            # the report period comes from its title ('2026年8月…', '2026年前三季度…'); page text holds
+            # navigation dates that must not set the period
+            tp = title_period(item["title"], item["date"])
+            if tp is None:
+                continue
             # since 2023 the TSF section is part of the monthly 金融统计数据报告: parse both on every report
             p = releases.pboc_tsf(text)
+            p["year"], p["month"] = tp.year, tp.month
             for b in p.get("blocks", []):
                 tsf_recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub))
             if "金融统计数据报告" in item["title"]:
                 p = releases.pboc_financial_statistics(text)
+                p["year"], p["month"] = tp.year, tp.month
                 for b in p.get("blocks", []):
                     loan_recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub))
                 if "m1_yoy" in p:
@@ -342,9 +349,18 @@ def ingest_ndrc(pages: int = 30) -> pd.DataFrame:
 QUARTER_PHRASE = {"一季度": 3, "上半年": 6, "前三季度": 9, "全年": 12}
 
 
-def title_period(title: str, url_date: str) -> pd.Timestamp | None:
-    """Reference period of an NBS release from its title (and URL date when the year is omitted)."""
+def title_period(title: str, url_date: str, text: str = "") -> pd.Timestamp | None:
+    """Reference period of an NBS release from its title.
+
+    When the title omits the year, the year is taken from the release text (first
+    '20XX年[1—]M月' matching the title's month) and only then from the URL date: NBS re-dated
+    archived pages during a 2023 site migration, so URL dates of old releases are not
+    publication dates (a 2020 interpretation sits under /202302/)."""
     y = re.search(r"(20\d\d)年", title)
+    if not y and text:
+        ms_ = re.findall(r"(\d{1,2})月", title)
+        if ms_:
+            y = re.search(r"(20\d\d)年(?:1[—\-–])?" + ms_[-1] + r"月", re.sub(r"\s+", "", text))
     ud = pd.Timestamp(url_date) if url_date else None
     for ph, mth in QUARTER_PHRASE.items():
         if ph in title and not re.search(r"\d{1,2}月", title):
@@ -358,6 +374,22 @@ def title_period(title: str, url_date: str) -> pd.Timestamp | None:
     return _month_end(year, mth) if year else None
 
 
+ARCHIVE_GAP_DAYS = 75
+NBS_TYPICAL_LAG_DAYS = 17
+
+
+def release_vintage(per: pd.Timestamp, url_date: str, retrieved_at: str) -> tuple[str, str]:
+    """(vintage date, flag). The URL date is the publication date unless it lies far after the
+    reference period (pages re-dated in NBS's 2023 site migration); then the vintage is
+    estimated as period end + the typical NBS release lag and flagged."""
+    if url_date:
+        ud = pd.Timestamp(url_date)
+        if (ud - per).days <= ARCHIVE_GAP_DAYS:
+            return url_date, ""
+        return (per + pd.Timedelta(days=NBS_TYPICAL_LAG_DAYS)).strftime("%Y-%m-%d"), "vintage_estimated_archive"
+    return retrieved_at[:10], "vintage_from_retrieval"
+
+
 def ingest_nbs_release_texts(pages: int = 70) -> pd.DataFrame:
     """NBS monthly releases (www.stats.gov.cn/sj/zxfb, archive back to Nov 2021): the primary NBS
     route, because the NBS data portal refuses cloud IPs (HTTP 403). One parser per release type
@@ -367,8 +399,7 @@ def ingest_nbs_release_texts(pages: int = 70) -> pd.DataFrame:
         lst = crawl("NBS", "https://www.stats.gov.cn/sj/zxfb/", r"(20\d\d年|\d月份|季度|上半年)", pages=pages)
         for item in lst:
             kind = next((k for k, (rx, _) in RELEASE_PARSERS.items() if re.search(rx, item["title"])), None)
-            per = title_period(item["title"], item["date"])
-            if kind is None or per is None:
+            if kind is None or title_period(item["title"], item["date"]) is None:
                 continue
             try:
                 content, raw, ts = fetch("NBS", item["url"], ext="html")
@@ -376,31 +407,32 @@ def ingest_nbs_release_texts(pages: int = 70) -> pd.DataFrame:
                 item_errors.append(str(e)[:160])
                 continue
             html = content.decode("utf-8", errors="replace")
-            prov = store.Provenance("NBS", "primary", item["url"], raw, ts, item["date"] or ts[:10],
-                                    lineage=f"release_text:{kind}")
+            per = title_period(item["title"], item["date"], _text(html))
+            vint, vflag = release_vintage(per, item["date"], ts)
+            prov = store.Provenance("NBS", "primary", item["url"], raw, ts, vint, lineage=f"release_text:{kind}")
             try:
                 vals = RELEASE_PARSERS[kind][1](html, per)
             except Exception as e:
                 item_errors.append(f"{item['url']}: parse {type(e).__name__}: {str(e)[:120]}")
                 continue
             for sid, (p, v) in vals.items():
-                rows.append(store.make_rows(sid, pd.Series([v], index=[p]), prov))
+                rows.append(store.make_rows(sid, pd.Series([v], index=[p]), prov, vflag))
             counts[kind] += 1
         # tier figures published in the urban-department interpretation (validation target)
         for item in crawl("NBS", "https://www.stats.gov.cn/sj/sjjd/", r"商品住宅销售价格变动情况", pages=pages):
-            per = title_period(item["title"], item["date"])
-            if per is None:
-                continue
             try:
                 text, raw, ts, _ = release_text("NBS", item["url"])
             except FetchError as e:
                 item_errors.append(str(e)[:160])
                 continue
-            prov = store.Provenance("NBS", "primary", item["url"], raw, ts, item["date"] or ts[:10],
-                                    lineage="release_text:70city_interpretation")
+            per = title_period(item["title"], item["date"], text)
+            if per is None:
+                continue
+            vint, vflag = release_vintage(per, item["date"], ts)
+            prov = store.Provenance("NBS", "primary", item["url"], raw, ts, vint, lineage="release_text:70city_interpretation")
             for k, v in releases.nbs_tiers_interpretation(text).items():
                 tier, seg, h = k.split("_")
-                rows.append(store.make_rows(f"nbs_text.hp.{seg}.{tier}.{h}", pd.Series([v], index=[per]), prov))
+                rows.append(store.make_rows(f"nbs_text.hp.{seg}.{tier}.{h}", pd.Series([v], index=[per]), prov, vflag))
             counts["70city_interpretation"] += 1
         _status("NBS releases", bool(rows), releases_listed=len(lst), parsed=dict(counts), item_errors=item_errors[:20])
     except Exception as e:

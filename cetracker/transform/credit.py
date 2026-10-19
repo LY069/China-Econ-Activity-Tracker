@@ -44,6 +44,20 @@ def credit_impulse(flow: pd.Series, gdp_q_nominal: pd.Series) -> pd.Series:
     return ((f12 - f12.shift(12)) / g * 100).dropna().rename("credit_impulse")
 
 
+def impulse_vs_stock(flow: pd.Series, stock: pd.Series) -> pd.Series:
+    """GDP-free credit impulse: (F12_t - F12_{t-12}) / TSF stock_{t-12} * 100.
+
+    Used for lead/lag inference because NBS release pages give nominal GDP only from late 2021,
+    which would leave the GDP-scaled impulse with ~30 observations. Scaling by the lagged stock
+    changes the units (percent of outstanding financing) but not the timing of turning points."""
+    f12 = rolling12(flow)
+    st = _me(stock)
+    lag = st.copy()
+    lag.index = lag.index + pd.offsets.MonthEnd(12)
+    idx = f12.index.intersection(lag.index)
+    return ((f12[idx] - f12.shift(12)[idx]) / lag[idx] * 100).dropna().rename("impulse_vs_stock")
+
+
 def flow_from_stock(stock: pd.Series) -> pd.Series:
     """Monthly flow implied by stock differences (validation only: write-offs/FX/reclassification
     make this differ from PBoC's published flow)."""

@@ -22,7 +22,15 @@ TSF_COLS = {
     "社会融资规模增量": "flow", "人民币贷款": "rmb_loans", "外币贷款": "fx_loans", "委托贷款": "entrusted",
     "信托贷款": "trust", "未贴现银行承兑汇票": "undiscounted_ba", "企业债券": "corp_bonds", "政府债券": "govt_bonds",
     "非金融企业境内股票": "equity", "存款类金融机构资产支持证券": "abs", "贷款核销": "writeoffs",
+    "地方政府专项债券": "lg_special_bonds",   # 2018 vintage: only LG special bonds were in TSF
 }
+
+
+def _tsf_key(c: str) -> str | None:
+    key = next((v for k, v in TSF_COLS.items() if c.startswith(k)), None)
+    if key is None and c.startswith("社会融资规模"):   # 2013-14 tables: plain "社会融资规模" = flow
+        key = "flow"
+    return key
 
 
 def decode(raw: bytes) -> str:
@@ -54,12 +62,8 @@ def tsf_flow_table(html: str) -> pd.DataFrame:
     rows = _rows(html)
     header = None
     for r in rows:
-        if any(c.startswith("社会融资规模增量") for c in r) and any("人民币贷款" in c for c in r):
-            header = []
-            for c in r:
-                key = next((v for k, v in TSF_COLS.items() if c.startswith(k)), None)
-                if key:
-                    header.append(key)
+        if any(c.startswith("社会融资规模") for c in r) and any("人民币贷款" in c for c in r):
+            header = [k for k in (_tsf_key(c) for c in r) if k]
             break
     if not header:
         raise ValueError("TSF flow header not found")
@@ -122,54 +126,82 @@ def month_columns_table(html: str) -> tuple[list[pd.Timestamp], list[tuple[str, 
 
 
 def money_supply(html: str) -> dict[str, pd.Series]:
+    """M2/M1/M0 levels (亿元). The 2025 table also carries, after its footnote, the 2024 M1 restated
+    on the new (Jan-2025) definition; it is returned as 'M1_restated' so 2025 y/y can be rebuilt."""
     periods, items = month_columns_table(html)
     out = {}
     for label, vals in items:
         for code in ("M2", "M1", "M0"):
             if f"（{code}）" in label or f"({code})" in label:
                 out[code] = pd.Series(vals, index=periods, dtype=float)
+    rows = _rows(html)
+    note = next((i for i, r in enumerate(rows) if r[0].startswith("注") and "M1" in "".join(r)), None)
+    if note is not None:
+        rp = None
+        for r in rows[note + 1:]:
+            ps = [PERIOD.match(c) for c in r]
+            if len(r) >= 6 and all(ps):
+                rp = [_me(*p.groups()) for p in ps]
+            elif rp and r[0].startswith("余额") and len(r) - 1 == len(rp):
+                vals = [float(v) if NUM.match(v) else None for v in r[1:]]
+                out["M1_restated"] = pd.Series(vals, index=rp, dtype=float).dropna()
+                break
     return out
 
 
-LOAN_KEYS = [
-    # (row label prefix after numbering, sector context required, output key)
-    ("各项贷款", None, "total"),
-    ("住户贷款", None, "hh_total"),
-    ("短期贷款", "hh", "hh_short"),
-    ("中长期贷款", "hh", "hh_medlong"),
-    ("企（事）业单位贷款", None, "corp_total"),
-    ("非金融企业及机关团体贷款", None, "corp_total"),
-    ("短期贷款", "corp", "corp_short"),
-    ("中长期贷款", "corp", "corp_medlong"),
-    ("票据融资", "corp", "corp_bills"),
-    ("融资租赁", "corp", "corp_leases"),
-    ("各项垫款", "corp", "corp_advances"),
-    ("非银行业金融机构贷款", None, "nbfi"),
-]
+LOAN_KEYS = {
+    # exact row names (numbering and English gloss stripped) -> key, with required sector context
+    ("各项贷款", None): "total",
+    ("住户贷款", None): "hh_total",
+    ("短期贷款", "hh"): "hh_short",
+    ("中长期贷款", "hh"): "hh_medlong",
+    ("企（事）业单位贷款", None): "corp_total",
+    ("非金融企业及机关团体贷款", None): "corp_total",
+    ("非金融企业及其他部门贷款", None): "corp_total",   # 2012-14 layout
+    ("短期贷款", "corp"): "corp_short",
+    ("中长期贷款", "corp"): "corp_medlong",
+    ("票据融资", "corp"): "corp_bills",
+    ("融资租赁", "corp"): "corp_leases",
+    ("各项垫款", "corp"): "corp_advances",
+    ("非银行业金融机构贷款", None): "nbfi",
+}
+# 2012-14 layout splits household loans by purpose; tenor totals are sums of these rows
+HH_OLD = {"短期消费性贷款": "hh_short", "短期经营性贷款": "hh_short",
+          "中长期消费性贷款": "hh_medlong", "中长期经营性贷款": "hh_medlong"}
+CORP_NAMES = ("企（事）业单位贷款", "非金融企业及机关团体贷款", "非金融企业及其他部门贷款")
 
 
 def credit_rmb_loans(html: str) -> dict[str, pd.Series]:
-    """Loan stocks by sector and tenor from 金融机构人民币信贷收支表 (亿元), first occurrence of each,
-    reading the uses side only. The household/corporate context follows the table's nesting."""
+    """Loan stocks by sector and tenor from 金融机构人民币信贷收支表 (亿元), uses side only.
+
+    Row names are matched exactly after stripping numbering and the English gloss, within the
+    household / corporate context given by the table's nesting. Handles the 2012-14 layout
+    (household loans split by purpose; corporate sector named 非金融企业及其他部门贷款)."""
     periods, items = month_columns_table(html)
     out, ctx, in_uses = {}, None, False
+    hh_old = {}
     for label, vals in items:
         name = re.sub(r"^[（(]?[一二三四五六七八九十\d]+[）)、.]?", "", label)
         name = re.sub(r"[A-Za-z].*$", "", name)          # drop the English gloss
-        if name.startswith("各项贷款"):
+        if name == "各项贷款":
             in_uses = True
         if not in_uses:
             continue
-        if name.startswith("住户贷款"):
+        if name == "住户贷款":
             ctx = "hh"
-        elif name.startswith(("企（事）业单位贷款", "非金融企业及机关团体贷款")):
+        elif name in CORP_NAMES:
             ctx = "corp"
-        elif name.startswith(("非银行业金融机构贷款", "境外贷款", "债券投资")):
+        elif name.startswith(("非银行业金融机构贷款", "境外贷款", "债券投资", "有价证券")):
             ctx = None
-        for prefix, need, key in LOAN_KEYS:
-            if name.startswith(prefix) and (need is None or need == ctx) and key not in out:
-                out[key] = pd.Series(vals, index=periods, dtype=float)
-                break
+        ser = pd.Series(vals, index=periods, dtype=float)
+        if ctx == "hh" and name in HH_OLD:
+            k = HH_OLD[name]
+            hh_old[k] = hh_old[k] + ser if k in hh_old else ser
+        key = LOAN_KEYS.get((name, ctx)) or LOAN_KEYS.get((name, None))
+        if key and key not in out:
+            out[key] = ser
         if name.startswith("境外贷款"):
             break
+    for k, ser in hh_old.items():
+        out.setdefault(k, ser)
     return out

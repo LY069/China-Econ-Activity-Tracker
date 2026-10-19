@@ -38,19 +38,18 @@ NOWCAST_LOG = ROOT / "data" / "nowcast_log.csv"
 # (x, y, label): candidate leading indicator -> official target. Inference uses unsmoothed
 # series (smoothing shifts estimated lead times); 3mma variants are for display only.
 PAIRS = [
-    ("lgb.special_new~impulse", "fai.ytd~cyoy", "New special bonds (impulse) -> FAI"),
-    ("lgb.new_total~impulse", "fai.ytd~cyoy", "New local bonds (impulse) -> FAI"),
-    ("ndrc.approvals_value", "fai.ytd~cyoy", "NDRC approvals -> FAI"),
-    ("tsf.flow_ex_govt~impulse", "fai.ytd~cyoy", "Credit impulse ex-govt -> FAI"),
-    ("tsf.flow~impulse", "ip.yoy", "Credit impulse -> IP"),
-    ("tsf.flow_ex_govt~impulse", "retail.yoy", "Credit impulse ex-govt -> retail sales"),
+    ("tsf.govt_bonds~impulse_stk", "fai.ytd~cyoy", "Govt bond net financing impulse -> FAI"),
+    ("lgb.new_total~impulse_stk", "fai.ytd~cyoy", "New local bonds impulse -> FAI"),
+    ("tsf.flow_ex_govt~impulse_stk", "fai.ytd~cyoy", "Credit impulse ex-govt -> FAI"),
+    ("tsf.flow~impulse_stk", "ip.yoy", "Credit impulse -> IP"),
+    ("tsf.flow_ex_govt~impulse_stk", "retail.yoy", "Credit impulse ex-govt -> retail sales"),
     ("money.m1_m2_gap", "re.sales_ytd~cyoy", "M1-M2 gap -> property sales"),
     ("money.m1_m2_gap", "ip.yoy", "M1-M2 gap -> IP"),
-    ("tsf.govt_bonds~impulse", "fai.ytd~cyoy", "Govt bond impulse -> FAI"),
+    ("ndrc.approvals_value", "fai.ytd~cyoy", "NDRC approvals -> FAI"),
 ]
 # publication lags (months) used by the nowcast ragged edge; see analytics/nowcast.py
-PUB_LAG = {"lgb.special_new~impulse": 0, "lgb.new_total~impulse": 0, "tsf.govt_bonds~impulse": 1,
-           "tsf.flow_ex_govt~impulse": 1, "tsf.flow~impulse": 1, "ndrc.approvals_value": 1,
+PUB_LAG = {"lgb.new_total~impulse_stk": 0, "tsf.govt_bonds~impulse_stk": 1,
+           "tsf.flow_ex_govt~impulse_stk": 1, "tsf.flow~impulse_stk": 1, "ndrc.approvals_value": 1,
            "money.m1_m2_gap": 1}
 COVID = ("2020-01-31", "2021-12-31")
 # NBS release history starts Nov 2021 (~58 monthly obs by late 2026): low power is reported, not hidden.
@@ -106,17 +105,19 @@ def run_analytics(get) -> dict:
             except Exception as e:
                 ex = {"error": str(e)[:200]}
             out["lead_lag"].append({**rec, "status": "ok", **full, "ex_covid": ex})
+        except lags.InsufficientData as e:
+            out["lead_lag"].append({**rec, "status": f"insufficient data: {e}"})
         except Exception as e:
             out["lead_lag"].append({**rec, "status": f"error: {type(e).__name__}: {str(e)[:200]}"})
     # FAI nowcast
     target = get("fai.ytd~cyoy")
     preds = {k: (get(k), PUB_LAG[k]) for k in PUB_LAG if not get(k).empty}
     models = {}
-    for name, use in [("AR + new local bonds", ["lgb.new_total~impulse"]),
-                      ("AR + special bonds", ["lgb.special_new~impulse"]),
+    for name, use in [("AR + govt bond impulse", ["tsf.govt_bonds~impulse_stk"]),
+                      ("AR + new local bonds", ["lgb.new_total~impulse_stk"]),
                       ("AR + NDRC approvals", ["ndrc.approvals_value"]),
-                      ("AR + credit impulse ex-govt", ["tsf.flow_ex_govt~impulse"]),
-                      ("AR + bonds + credit", ["lgb.new_total~impulse", "tsf.flow_ex_govt~impulse"])]:
+                      ("AR + credit impulse ex-govt", ["tsf.flow_ex_govt~impulse_stk"]),
+                      ("AR + govt bonds + credit", ["tsf.govt_bonds~impulse_stk", "tsf.flow_ex_govt~impulse_stk"])]:
         if all(u in preds for u in use):
             models[name] = use
     if len(target.dropna()) >= NOWCAST_MIN_TRAIN + 12 and models:
@@ -139,7 +140,7 @@ def run_analytics(get) -> dict:
     if len(g.dropna()) >= 24:
         try:
             qp = {}
-            for sid in ("ip.yoy", "retail.yoy~real", "fai.ytd~cyoy~real", "tsf.flow~impulse"):
+            for sid in ("ip.yoy", "retail.yoy~real", "fai.ytd~cyoy~real", "tsf.flow~impulse_stk"):
                 s = get(sid)
                 if not s.empty:
                     qp[sid] = (nowcast.bridge_quarterly(s, 1), 0)

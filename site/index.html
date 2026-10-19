@@ -258,8 +258,10 @@ const VIEWS = {
   ]},
   activity: {label:"Activity", filters:{measure:[["yoy","y/y"],["sa","SA m/m"],["real","Real y/y"],["level","Level"]]}, render: renderActivity},
   credit: {label:"Credit", render: () => [
-    chartCard({title:"Credit impulse", sub:"Δ12m of 12-month credit flow, % of trailing 4Q nominal GDP · tracker calc from PBoC + NBS", unit:"%", zero:true,
+    chartCard({title:"Credit impulse, % of GDP", sub:"Δ12m of 12-month flow, % of trailing 4Q nominal GDP · from 2024 (NBS GDP history starts late 2021)", unit:"%", zero:true,
       series:[{id:"tsf.flow~impulse",label:"TSF"},{id:"tsf.flow_ex_govt~impulse",label:"TSF ex-govt bonds"},{id:"loans.total~impulse",label:"RMB loans"}]}),
+    chartCard({title:"Credit impulse, % of TSF stock (long history)", sub:"Δ12m of 12-month flow, % of TSF stock 12 months earlier · PBoC tables", unit:"%", zero:true,
+      series:[{id:"tsf.flow~impulse_stk",label:"TSF"},{id:"tsf.flow_ex_govt~impulse_stk",label:"TSF ex-govt bonds"},{id:"tsf.govt_bonds~impulse_stk",label:"Govt bonds"}]}),
     chartCard({title:"Total social financing: monthly flow by component", sub:"RMB bn · PBoC", unit:"RMB bn", type:"bar", stack:true, zero:true,
       series:[{id:"tsf.rmb_loans",label:"RMB loans"},{id:"tsf.govt_bonds",label:"Govt bonds"},{id:"tsf.corp_bonds",label:"Corp bonds"},{id:"tsf.undiscounted_ba",label:"Undiscounted BA"},{id:"tsf.equity",label:"Equity"},{id:"tsf.trust",label:"Trust"},{id:"tsf.entrusted",label:"Entrusted"},{id:"tsf.fx_loans",label:"FX loans"}]}),
     chartCard({title:"TSF: 12-month rolling flow", sub:"RMB bn · total vs ex-government bonds", unit:"RMB bn",
@@ -291,7 +293,7 @@ function renderOverview(){
   const out = [];
   const tiles = el("div",{class:"tiles"});
   const T = [["gdp.real_yoy","Real GDP","% y/y"],["ip.yoy","Industrial production","% y/y"],["retail.yoy","Retail sales","% y/y"],
-    ["fai.ytd_yoy","Fixed-asset investment","% YTD y/y"],["fai.ytd~cyoy","FAI, single month","% y/y (comparable)"],["tsf.flow_ex_govt~impulse","Credit impulse ex-govt","% of GDP"],
+    ["fai.ytd_yoy","Fixed-asset investment","% YTD y/y"],["fai.ytd~cyoy","FAI, single month","% y/y (comparable)"],["tsf.flow_ex_govt~impulse_stk","Credit impulse ex-govt","% of TSF stock"],
     ["money.m1_m2_gap","M1 – M2 gap","pp"],["hp.new.all70.mom","New home prices, 70 cities","% m/m"],["lgb.special_new","New special bonds, latest month","RMB bn"]];
   for (const [id,lab,u] of T){
     const l = last(id); const s=S(id);
@@ -302,8 +304,8 @@ function renderOverview(){
   const g = el("div",{class:"grid"});
   g.append(chartCard({title:"Activity momentum", sub:"% y/y, 3-month average · NBS", unit:"%",
     series:[{id:"ip.yoy~3mma",label:"IP"},{id:"retail.yoy~3mma",label:"Retail"},{id:"fai.ytd~cyoy~3mma",label:"FAI (single month)"}]}));
-  g.append(chartCard({title:"Credit and fiscal impulse", sub:"Δ12m of 12-month flow, % of GDP", unit:"%", zero:true,
-    series:[{id:"tsf.flow_ex_govt~impulse",label:"Credit ex-govt"},{id:"lgb.new_total~impulse",label:"New local bonds"},{id:"tsf.govt_bonds~impulse",label:"Govt bonds (TSF)"}]}));
+  g.append(chartCard({title:"Credit and fiscal impulse", sub:"Δ12m of 12-month flow, % of TSF stock a year earlier (GDP-free; used in the lead–lag tests)", unit:"%", zero:true,
+    series:[{id:"tsf.flow_ex_govt~impulse_stk",label:"Credit ex-govt"},{id:"tsf.govt_bonds~impulse_stk",label:"Govt bond net financing"},{id:"tsf.flow~impulse_stk",label:"Total TSF"}]}));
   out.push(g);
   out.push(el("h2",{},"Leading-indicator verdicts"));
   const ll = state.data?.analytics?.lead_lag || [];
@@ -495,14 +497,15 @@ function renderNowcast(){
     const ev = a.nowcast?.[key];
     out.push(el("h2",{}, key==="fai"?"FAI single-month growth (comparable basis)":"Real GDP growth (bridge, first month of quarter)"));
     if (!ev || ev.error){ out.push(el("div",{class:"empty"}, `Not evaluated: ${ev?.error||"no data"}`)); continue; }
-    const tb = el("table"); tb.append(el("thead",{},el("tr",{},...["Model","RMSE","RMSE ex-2020–21","Relative to AR","DM stat","DM p","Beats AR (p<0.10)"].map(h=>el("th",{},h)))));
+    const tb = el("table"); tb.append(el("thead",{},el("tr",{},...["Model","OOS months","RMSE","AR RMSE (same sample)","Relative to AR","DM p","Beats AR (p<0.10)"].map(h=>el("th",{},h)))));
     const body = el("tbody");
-    Object.entries(ev.models).forEach(([m,r])=>body.append(el("tr",{},el("td",{},m),el("td",{class:"num"},fmt(r.rmse,2)),el("td",{class:"num"},fmt(r.rmse_ex_excluded_window,2)),el("td",{class:"num"},fmt(r.rel_rmse_vs_ar,3)),el("td",{class:"num"},fmt(r.dm_stat,2)),el("td",{class:"num"},fmt(r.dm_p,3)),el("td",{}, m.startsWith("AR(1)")?"benchmark": r.beats_ar?"yes":"no"))));
+    Object.entries(ev.models).forEach(([m,r])=>body.append(r.status ? el("tr",{},el("td",{},m),el("td",{colspan:6},r.status)) :
+      el("tr",{},el("td",{},m),el("td",{class:"num"},`${r.n_oos} (${r.oos_start} to ${r.oos_end})`),el("td",{class:"num"},fmt(r.rmse,2)),el("td",{class:"num"},fmt(r.rmse_ar_same_sample,2)),el("td",{class:"num"},fmt(r.rel_rmse_vs_ar,3)),el("td",{class:"num"},fmt(r.dm_p,3)),el("td",{}, r.beats_ar?"yes":"no"))));
     tb.append(body);
-    out.push(el("div",{class:"card"}, el("div",{class:"csub"},`Out-of-sample ${ev.oos_start} to ${ev.oos_end}, n = ${ev.n_oos}. Target ${ev.target}.`), el("div",{class:"tablewrap"},tb)));
+    out.push(el("div",{class:"card"}, el("div",{class:"csub"},`Each model is scored against an AR(1) benchmark refitted on that model's own sample. Target ${ev.target}.`), el("div",{class:"tablewrap"},tb)));
     const box = el("div",{class:"chart"}); out.push(el("div",{class:"card"}, el("h3",{},"Out-of-sample nowcasts vs actual"), box));
     requestAnimationFrame(()=>{ const ch=echarts.init(box,null,{renderer:"svg"}); state.charts.push(ch);
-      const ms = Object.keys(ev.forecasts).slice(0,4);
+      const ms = Object.keys(ev.forecasts).slice(0,4);   // includes the AR benchmark
       ch.setOption({animation:false,grid:{left:8,right:16,top:34,bottom:8,containLabel:true},legend:{top:0,left:0,itemWidth:14,itemHeight:2,textStyle:{color:css("--ink2"),fontSize:12}},
         tooltip:{trigger:"axis",backgroundColor:css("--surface"),borderColor:css("--border"),textStyle:{color:css("--ink"),fontSize:12},valueFormatter:v=>fmt(v,2)+" %"},
         xAxis:{type:"time",axisLabel:{color:css("--muted")},axisLine:{lineStyle:{color:css("--axis")}}},yAxis:{type:"value",scale:true,axisLabel:{color:css("--muted")},splitLine:{lineStyle:{color:css("--grid")}}},

@@ -95,17 +95,32 @@ def yoy_reproduction(get, ytd_id, ytd_yoy_id, pub_yoy_id, tol_pp=0.15):
     need = [ytd_id, ytd_yoy_id, pub_yoy_id]
     if any(get(s).empty for s in need):
         return _missing(cid, "Published y/y reproduction", desc, [s for s in need if get(s).empty])
-    cy = Y.comparable_single_month_yoy(get(ytd_id), get(ytd_yoy_id))
+    ytd, g = get(ytd_id), get(ytd_yoy_id)
+    cy = Y.comparable_single_month_yoy(ytd, g)
     pub = get(pub_yoy_id)
     idx = cy.index.intersection(pub.index)
     idx = idx[idx.month > 2]
+    # Published YTD growth is rounded to 0.1pp, so each implied base B = YTD/(1+g) carries an
+    # error up to B*0.0005/(1+g). The single-month base B_t - B_{t-1} inherits both errors; the
+    # tolerance is that propagated bound plus the 0.05pp rounding of the published figure.
+    base = Y.implied_base(ytd, g)
+    tol = {}
+    for t in idx:
+        prev = t - pd.offsets.MonthEnd(1)
+        if prev in base.index and t in base.index:
+            sm_base = base[t] - base[prev]
+            err = (base[t] * 0.0005 / (1 + g[t] / 100) + base[prev] * 0.0005 / (1 + g[prev] / 100))
+            tol[t] = (err / sm_base) * (1 + cy[t] / 100) * 100 + 0.05
     df = pd.DataFrame({"computed": cy[idx], "published": pub[idx]})
     df["diff"] = df["computed"] - df["published"]
-    df["exception"] = df["diff"].abs() > tol_pp
+    df["tol"] = pd.Series(tol).reindex(idx).fillna(tol_pp)
+    df["exception"] = df["diff"].abs() > df["tol"]
     nexc = int(df["exception"].sum())
     status = "PASS" if nexc == 0 else ("WARN" if nexc / max(len(df), 1) < 0.1 else "FAIL")
-    return _rec(cid, "Published y/y reproduction", desc, status, len(df), nexc, f"{tol_pp} pp",
-                f"mean |diff| {df['diff'].abs().mean():.3f} pp", _exc_list(df, ["computed", "published", "diff"]))
+    return _rec(cid, "Published y/y reproduction", desc, status, len(df), nexc,
+                "rounding bound propagated from 0.1pp-rounded YTD growth (+0.05pp)",
+                f"mean |diff| {df['diff'].abs().mean():.3f} pp; mean tolerance {df['tol'].mean():.3f} pp",
+                _exc_list(df, ["computed", "published", "diff", "tol"]))
 
 
 def naive_gap(get, level_id, pub_yoy_id, tol_pp=0.5):
@@ -245,7 +260,8 @@ def run(get) -> list[dict]:
                         "New corporate loans: PBoC credit-table stock change vs PBoC release text",
                         "loans.corp_total", "loans_text.corp_total", tol_abs=50, warn_only=True))
     R.append(pair_check(get, "recon:tsf_table_vs_text", "Cross-source reconciliation",
-                        "TSF monthly flow: PBoC statistics table vs PBoC release text", "tsf.flow", "tsf_text.flow", tol_abs=5))
+                        "TSF monthly flow: PBoC statistics table vs PBoC release text (text rounded to RMB 10bn)",
+                        "tsf.flow", "tsf_text.flow", tol_abs=10))
     R.append(pair_check(get, "recon:m2_yoy", "Published y/y reproduction",
                         "M2 y/y computed from PBoC money-supply levels vs published", "money.m2~yoy_calc", "money.m2_yoy",
                         tol_abs=0.15, warn_only=True))

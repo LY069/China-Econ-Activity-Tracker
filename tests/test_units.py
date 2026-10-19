@@ -174,3 +174,15 @@ def test_tier_interpretation_phrasing():
     p = R.nbs_tiers_interpretation(t)
     assert p["tier1_new_mom"] == 0.1 and p["tier2_new_mom"] == 0.0
     assert p["tier2_new_yoy"] == -2.4 and p["tier3_new_yoy"] == -3.9
+
+
+
+def test_nowcast_per_model_samples():
+    rng = np.random.default_rng(2)
+    idx = pd.date_range("2015-01-31", periods=120, freq="ME")
+    x = pd.Series(rng.normal(size=120), idx)
+    y = pd.Series(0.8 * x.values + rng.normal(0, 0.5, 120), idx)
+    short = x.iloc[-20:]
+    r = N.evaluate(y, {"x": (x, 0), "short": (short, 0)}, {"m_x": ["x"], "m_short": ["short"]}, min_train=48)
+    assert r["models"]["m_x"]["n_oos"] > 50 and r["models"]["m_x"]["beats_ar"]
+    assert "insufficient" in r["models"]["m_short"]["status"]

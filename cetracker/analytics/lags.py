@@ -250,11 +250,17 @@ class LeadLagResult:
         return asdict(self)
 
 
+class InsufficientData(ValueError):
+    pass
+
+
 def lead_lag(x: pd.Series, y: pd.Series, xname: str, yname: str, max_lag: int = 12,
-             break_dates: list[str] | None = None, n_boot: int = 499) -> LeadLagResult:
+             break_dates: list[str] | None = None, n_boot: int = 499, min_obs: int = 36) -> LeadLagResult:
     xs, tx = make_stationary(x.dropna())
     ys, ty = make_stationary(y.dropna())
     d = _align(xs, ys)
+    if len(d) < min_obs:
+        raise InsufficientData(f"longest contiguous common span is {len(d)} months (< {min_obs})")
     raw = ccf(d["x"], d["y"], max_lag)
     xw, yw, p = prewhiten(d["x"], d["y"])
     pw = ccf(xw, yw, max_lag)

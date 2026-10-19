@@ -70,53 +70,67 @@ def dm_test(e_model: np.ndarray, e_bench: np.ndarray, h: int = 1) -> tuple[float
 
 def evaluate(target: pd.Series, predictors: dict[str, tuple[pd.Series, int]], models: dict[str, list[str]],
              min_train: int = 48, ar: int = 1, exclude: tuple[str, str] | None = None) -> dict:
-    """Expanding-window pseudo real-time evaluation of several models vs AR benchmark.
+    """Expanding-window pseudo real-time evaluation of each model vs the AR benchmark.
 
-    exclude: optional (start, end) window dropped from *estimation* (e.g. COVID months);
-    forecasts are still made and scored for those months but reported separately.
+    Each model is compared with the benchmark on their own common sample (predictor coverage
+    differs a lot: NDRC ends in 2021, MOF local bonds start in 2022), so a short-history model
+    does not shrink everyone else's sample. Models without min_train + 8 usable months are
+    reported as insufficient. exclude: optional (start, end) window dropped from estimation;
+    forecasts are still made and scored for those months, and errors are also reported without them.
     """
-    models = {"AR(1) benchmark": [], **models}
-    designs = {m: design(target, predictors, use, ar) for m, use in models.items()}
-    # common evaluation sample: rows where every model has complete data
-    common = None
-    for m, D in designs.items():
-        ok = D.dropna().index
-        common = ok if common is None else common.intersection(ok)
-    common = common.sort_values()
-    if len(common) < min_train + 8:
-        return {"error": f"too few common observations ({len(common)})", "models": list(models)}
-    origins = common[min_train:]
-    fc = {m: {} for m in models}
-    for t in origins:
-        for m, D in designs.items():
-            train = D.loc[common[common < t]].dropna()
+    bench = design(target, predictors, [], ar)
+    out = {"models": {}, "forecasts": {}, "actual": {}}
+
+    def run(D: pd.DataFrame, origins) -> dict:
+        fc = {}
+        for t in origins:
+            train = D.loc[D.index < t].dropna()
             if exclude:
                 train = train[(train.index < exclude[0]) | (train.index > exclude[1])]
             X = sm.add_constant(train.drop(columns="y"), has_constant="add")
             res = sm.OLS(train["y"], X).fit()
             xt = sm.add_constant(D.loc[[t]].drop(columns="y"), has_constant="add")
-            fc[m][t] = float(np.asarray(res.predict(xt))[0])
-    actual = designs["AR(1) benchmark"].loc[origins, "y"]
-    out = {"n_oos": len(origins), "oos_start": str(origins[0].date()), "oos_end": str(origins[-1].date()),
-           "models": {}, "forecasts": {}}
-    bench_e = actual.values - np.array([fc["AR(1) benchmark"][t] for t in origins])
-    for m in models:
-        f = np.array([fc[m][t] for t in origins])
-        e = actual.values - f
+            fc[t] = float(np.asarray(res.predict(xt))[0])
+        return fc
+
+    def score(e: np.ndarray, origins) -> tuple[float, float]:
         rmse = float(np.sqrt(np.mean(e ** 2)))
-        stat, p = (np.nan, np.nan) if m == "AR(1) benchmark" else dm_test(e, bench_e)
         mask = np.ones(len(origins), bool)
         if exclude:
             mask = ~((origins >= exclude[0]) & (origins <= exclude[1]))
-        rmse_ex = float(np.sqrt(np.mean(e[mask] ** 2))) if mask.any() else np.nan
+        return rmse, (float(np.sqrt(np.mean(e[mask] ** 2))) if mask.any() else np.nan)
+
+    for m, use in models.items():
+        D = design(target, predictors, use, ar)
+        common = D.dropna().index.intersection(bench.dropna().index).sort_values()
+        if len(common) < min_train + 8:
+            out["models"][m] = {"predictors": use, "status": f"insufficient data ({len(common)} common months)"}
+            continue
+        origins = common[min_train:]
+        f_m = run(D.loc[common], origins)
+        f_b = run(bench.loc[common], origins)
+        actual = bench.loc[origins, "y"]
+        e_m = actual.values - np.array([f_m[t] for t in origins])
+        e_b = actual.values - np.array([f_b[t] for t in origins])
+        r_m, r_m_ex = score(e_m, origins)
+        r_b, r_b_ex = score(e_b, origins)
+        stat, p = dm_test(e_m, e_b)
         out["models"][m] = {
-            "predictors": models[m], "rmse": rmse, "rmse_ex_excluded_window": rmse_ex,
-            "rel_rmse_vs_ar": rmse / float(np.sqrt(np.mean(bench_e ** 2))),
-            "dm_stat": stat, "dm_p": p,
-            "beats_ar": bool(m != "AR(1) benchmark" and rmse < np.sqrt(np.mean(bench_e ** 2)) and p == p and p < 0.10),
+            "predictors": use, "n_oos": len(origins), "oos_start": str(origins[0].date()), "oos_end": str(origins[-1].date()),
+            "rmse": r_m, "rmse_ar_same_sample": r_b, "rmse_ex_excluded_window": r_m_ex,
+            "rel_rmse_vs_ar": r_m / r_b, "dm_stat": stat, "dm_p": p,
+            "beats_ar": bool(r_m < r_b and p == p and p < 0.10),
         }
-        out["forecasts"][m] = {str(t.date()): v for t, v in zip(origins, f)}
-    out["actual"] = {str(t.date()): float(v) for t, v in actual.items()}
+        out["forecasts"][m] = {str(t.date()): v for t, v in f_m.items()}
+        out["forecasts"].setdefault("AR(1) benchmark", {}).update({str(t.date()): v for t, v in f_b.items()})
+        out["actual"].update({str(t.date()): float(v) for t, v in actual.items()})
+    ok = [v for v in out["models"].values() if "n_oos" in v]
+    if not ok:
+        out["error"] = "no model has enough data: " + "; ".join(f"{k}: {v['status']}" for k, v in out["models"].items())
+    else:
+        out["n_oos"] = max(v["n_oos"] for v in ok)
+        out["oos_start"] = min(v["oos_start"] for v in ok)
+        out["oos_end"] = max(v["oos_end"] for v in ok)
     return out
 
 
@@ -125,8 +139,15 @@ def live_nowcast(target: pd.Series, predictors: dict[str, tuple[pd.Series, int]]
     """Nowcast for the first target month not yet published, using all data available now."""
     y = _me(target).dropna()
     t_next = y.index.max() + pd.offsets.MonthEnd(1)
-    ext = pd.concat([y, pd.Series([np.nan], index=[t_next])])
-    D = design(ext, predictors, use, ar)
+    D = design(y, predictors, use, ar)
+    # append the target month: lagged predictors and the AR term are known before its release
+    row = {"y": np.nan, **{f"y_l{i}": y.iloc[-i] for i in range(1, ar + 1)}}
+    for name in use:
+        s, lag = predictors[name]
+        s = _me(s)
+        src = t_next - pd.offsets.MonthEnd(lag)
+        row[name] = float(s[src]) if src in s.index else np.nan
+    D = pd.concat([D, pd.DataFrame([row], index=[t_next])])
     train = D.dropna()
     if exclude:
         train = train[(train.index < exclude[0]) | (train.index > exclude[1])]

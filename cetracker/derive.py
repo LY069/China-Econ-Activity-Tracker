@@ -147,7 +147,21 @@ class Deriver:
             self.put("loans." + sid.split(".", 1)[1], full.diff(), "flow_from_stock[diff]", [sid])
         for code in ("m2", "m1"):
             if self.has(f"money.{code}"):
-                self.put(f"money.{code}~yoy_calc", C.stock_yoy(self.get(f"money.{code}")), "stock_yoy", [f"money.{code}"])
+                lvl = self.get(f"money.{code}")
+                ins = [f"money.{code}"]
+                if code == "m1" and self.has("money.m1_restated"):
+                    # Jan-2025 M1 redefinition: 2024 base replaced by PBoC's restated comparable levels
+                    base = lvl.copy()
+                    rs = self.get("money.m1_restated")
+                    base.loc[rs.index] = rs
+                    lag = base.copy()
+                    lag.index = lag.index + pd.offsets.MonthEnd(12)
+                    idx = lvl.index.intersection(lag.index)
+                    yoy = (lvl[idx] / lag[idx] - 1) * 100
+                    ins.append("money.m1_restated")
+                else:
+                    yoy = C.stock_yoy(lvl)
+                self.put(f"money.{code}~yoy_calc", yoy, "stock_yoy[restated base where published]", ins)
         if self.has("money.m1_yoy", "money.m2_yoy"):
             self.put("money.m1_m2_gap", C.gap(self.get("money.m1_yoy"), self.get("money.m2_yoy")), "difference",
                      ["money.m1_yoy", "money.m2_yoy"], "")
@@ -156,6 +170,8 @@ class Deriver:
             # redefinition) carry no govt-bond column: ex-govt = total there, flagged.
             tot = self.get("tsf.flow")
             gov = self.get("tsf.govt_bonds").reindex(tot.index)
+            if self.has("tsf.lg_special_bonds"):      # 2018 vintage: only LG special bonds in TSF
+                gov = gov.fillna(self.get("tsf.lg_special_bonds").reindex(tot.index))
             fl = pd.Series(np.where(gov.isna(), "govt_bonds_not_in_definition", ""), index=tot.index)
             self.put("tsf.flow_ex_govt", tot - gov.fillna(0.0), "difference[govt missing=0]",
                      ["tsf.flow", "tsf.govt_bonds"], fl[fl != ""])
@@ -170,6 +186,13 @@ class Deriver:
                          "credit_impulse[d12(sum12)/gdp4q]", [sid, "gdp.nominal_q"])
         if self.has("tsf.stock"):
             self.put("tsf.stock~yoy_calc", C.stock_yoy(self.get("tsf.stock")), "stock_yoy", ["tsf.stock"])
+            for sid in ("tsf.flow", "tsf.flow_ex_govt", "tsf.govt_bonds", "lgb.new_total"):
+                if self.has(sid):
+                    flow = self.get(sid)
+                    if sid == "tsf.govt_bonds" and self.has("tsf.lg_special_bonds"):
+                        flow = flow.combine_first(self.get("tsf.lg_special_bonds"))
+                    self.put(f"{sid}~impulse_stk", C.impulse_vs_stock(flow, self.get("tsf.stock")),
+                             "impulse_vs_stock[d12(sum12)/tsf_stock_t-12]", [sid, "tsf.stock"])
 
     # ------------------------------------------------------------------ bonds
     def bonds(self):
