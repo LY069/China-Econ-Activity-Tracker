@@ -78,22 +78,25 @@ def make(seed: int = 7) -> pd.DataFrame:
 
     # --- GDP quarterly
     q = pd.date_range("2012-03-31", "2026-06-30", freq="QE")
-    gnom = pd.Series(130000 * np.exp(0.02 * np.arange(len(q))), q)
-    out.append(_rows("gdp.nominal_q", gnom))
+    gnom = pd.Series(13000 * np.exp(0.02 * np.arange(len(q))), q)
+    gytd = gnom.groupby(gnom.index.year).cumsum()
+    out.append(_rows("gdp.nominal_ytd", gytd))
     out.append(_rows("gdp.real_yoy", pd.Series(5 + rng.normal(0, 0.3, len(q)), q)))
     for p, sh in [("primary", 0.07), ("secondary", 0.38), ("tertiary", 0.55)]:
-        out.append(_rows(f"gdp.{p}_nominal_q", gnom * sh))
-        out.append(_rows(f"gdp.{p}_real_yoy", pd.Series(5 + rng.normal(0, 0.5, len(q)), q)))
+        out.append(_rows(f"gdp.{p}_nominal_ytd", gytd * sh))
+        out.append(_rows(f"gdp.{p}_real_ytd_yoy", pd.Series(5 + rng.normal(0, 0.5, len(q)), q)))
 
     # --- credit (RMB bn): exact identities
     hs, hm = rng.normal(50, 80, n), rng.normal(300, 150, n)
     cs, cm, cb = rng.normal(200, 300, n), rng.normal(600, 200, n), rng.normal(50, 200, n)
     nb = rng.normal(20, 60, n)
-    out += [_rows("loans.hh_short", pd.Series(hs, MONTHS)), _rows("loans.hh_medlong", pd.Series(hm, MONTHS)),
-            _rows("loans.hh_total", pd.Series(hs + hm, MONTHS)),
-            _rows("loans.corp_short", pd.Series(cs, MONTHS)), _rows("loans.corp_medlong", pd.Series(cm, MONTHS)),
-            _rows("loans.corp_bills", pd.Series(cb, MONTHS)), _rows("loans.corp_total", pd.Series(cs + cm + cb, MONTHS)),
-            _rows("loans.nbfi", pd.Series(nb, MONTHS)), _rows("loans.total", pd.Series(hs + hm + cs + cm + cb + nb, MONTHS))]
+    flows = {"hh_short": hs, "hh_medlong": hm, "corp_short": cs, "corp_medlong": cm, "corp_bills": cb,
+             "corp_leases": np.zeros(n), "corp_advances": np.zeros(n), "nbfi": nb}
+    stocks = {k: 10000 + np.cumsum(v) for k, v in flows.items()}
+    stocks["hh_total"] = stocks["hh_short"] + stocks["hh_medlong"]
+    stocks["corp_total"] = sum(stocks[k] for k in ("corp_short", "corp_medlong", "corp_bills", "corp_leases", "corp_advances"))
+    stocks["total"] = stocks["hh_total"] + stocks["corp_total"] + stocks["nbfi"]
+    out += [_rows(f"loans_stock.{k}", pd.Series(v, MONTHS)) for k, v in stocks.items()]
     comps = {k: rng.normal(mu, sd, n) for k, mu, sd in [("rmb_loans", 1300, 500), ("fx_loans", 0, 30),
              ("entrusted", -20, 50), ("trust", -10, 50), ("undiscounted_ba", 0, 200), ("corp_bonds", 200, 150),
              ("govt_bonds", 600, 300), ("equity", 50, 20)]}

@@ -119,23 +119,46 @@ class Deriver:
 
     # ------------------------------------------------------------------ GDP
     def gdp(self):
+        """Quarterly nominal GDP from YTD releases; sector contributions to YTD real growth."""
+        def q_from_ytd(sid):
+            y = self.get(sid).dropna()
+            prev = y.groupby(y.index.year).shift(1)
+            q = (y - prev.fillna(0)).where((y.index.month == 3) | prev.notna())
+            return q.dropna()
+        if self.has("gdp.nominal_ytd"):
+            self.put("gdp.nominal_q", q_from_ytd("gdp.nominal_ytd"), "quarter_from_ytd", ["gdp.nominal_ytd"])
         parts = ["primary", "secondary", "tertiary"]
-        if self.has("gdp.nominal_q", *[f"gdp.{p}_nominal_q" for p in parts], *[f"gdp.{p}_real_yoy" for p in parts]):
-            g = self.get("gdp.nominal_q")
+        if self.has("gdp.nominal_ytd", *[f"gdp.{p}_nominal_ytd" for p in parts], *[f"gdp.{p}_real_ytd_yoy" for p in parts]):
+            g = self.get("gdp.nominal_ytd")
             for p in parts:
-                share_lag = (self.get(f"gdp.{p}_nominal_q") / g).shift(4)
-                c = share_lag * self.get(f"gdp.{p}_real_yoy")
-                self.put(f"gdp.contrib_{p}", c, "contribution[share_t-4*real_yoy]",
-                         ["gdp.nominal_q", f"gdp.{p}_nominal_q", f"gdp.{p}_real_yoy"])
+                share = self.get(f"gdp.{p}_nominal_ytd") / g
+                share_lag = share.copy()
+                share_lag.index = share_lag.index + pd.offsets.QuarterEnd(4)
+                c = share_lag.reindex(share.index) * self.get(f"gdp.{p}_real_ytd_yoy")
+                self.put(f"gdp.contrib_{p}", c, "contribution[ytd_share_t-4q*ytd_real_yoy]",
+                         ["gdp.nominal_ytd", f"gdp.{p}_nominal_ytd", f"gdp.{p}_real_ytd_yoy"])
 
     # ------------------------------------------------------------------ credit
     def credit(self):
+        # new loans by sector/tenor = change in PBoC RMB credit-table stocks (full history)
+        for sid in [x for x in self.obs["series_id"].unique() if x.startswith("loans_stock.")]:
+            st = self.get(sid)
+            full = st.reindex(pd.date_range(st.index.min(), st.index.max(), freq="ME"))
+            self.put("loans." + sid.split(".", 1)[1], full.diff(), "flow_from_stock[diff]", [sid])
+        for code in ("m2", "m1"):
+            if self.has(f"money.{code}"):
+                self.put(f"money.{code}~yoy_calc", C.stock_yoy(self.get(f"money.{code}")), "stock_yoy", [f"money.{code}"])
         if self.has("money.m1_yoy", "money.m2_yoy"):
             self.put("money.m1_m2_gap", C.gap(self.get("money.m1_yoy"), self.get("money.m2_yoy")), "difference",
                      ["money.m1_yoy", "money.m2_yoy"], "")
-        if self.has("tsf.flow", "tsf.govt_bonds"):
-            ex = C.ex_component(self.get("tsf.flow").rename("tsf"), self.get("tsf.govt_bonds").rename("govt"))
-            self.put("tsf.flow_ex_govt", ex, "difference", ["tsf.flow", "tsf.govt_bonds"])
+        if self.has("tsf.flow"):
+            # months whose TSF definition predates government bonds (PBoC tables before the 2019
+            # redefinition) carry no govt-bond column: ex-govt = total there, flagged.
+            tot = self.get("tsf.flow")
+            gov = self.get("tsf.govt_bonds").reindex(tot.index)
+            fl = pd.Series(np.where(gov.isna(), "govt_bonds_not_in_definition", ""), index=tot.index)
+            self.put("tsf.flow_ex_govt", tot - gov.fillna(0.0), "difference[govt missing=0]",
+                     ["tsf.flow", "tsf.govt_bonds"], fl[fl != ""])
         gdp_ok = self.has("gdp.nominal_q")
         for sid in ("tsf.flow", "tsf.flow_ex_govt", "tsf.rmb_loans", "loans.total", "tsf.govt_bonds"):
             if not self.has(sid):

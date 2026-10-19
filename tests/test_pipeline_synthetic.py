@@ -28,7 +28,7 @@ def _check(vals, cid):
     return next(v for v in vals if v["id"] == cid)
 
 
-@pytest.mark.parametrize("cid", ["id:hh_loans", "id:lgb_total", "id:lgb_new", "id:lgb_refi",
+@pytest.mark.parametrize("cid", ["id:hh_loan_stock", "id:corp_loan_stock", "id:loans_sector", "id:lgb_total", "id:lgb_new", "id:lgb_refi",
                                  "ytd_roundtrip:retail.ytd", "ytd_roundtrip:fai.ytd"])
 def test_identities_pass(pipeline, cid):
     _, vals = pipeline
@@ -70,3 +70,16 @@ def test_planted_lead_recovered(pipeline):
 def test_derived_rows_have_lineage(pipeline):
     get, _ = pipeline
     assert not get("fai.ytd~cyoy").empty and not get("tsf.flow_ex_govt~impulse").empty
+
+
+def test_gdp_quarters_from_ytd(pipeline):
+    get, _ = pipeline
+    q, ytd = get("gdp.nominal_q"), get("gdp.nominal_ytd")
+    assert abs(q.groupby(q.index.year).sum().iloc[1] - ytd[ytd.index.month == 12].iloc[1]) < 1e-6
+    assert not get("gdp.contrib_secondary").empty
+
+
+def test_loan_flows_from_stocks(pipeline):
+    get, _ = pipeline
+    f, st = get("loans.hh_total"), get("loans_stock.hh_total")
+    assert abs(f.iloc[-1] - (st.iloc[-1] - st.iloc[-2])) < 1e-9

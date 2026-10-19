@@ -246,17 +246,17 @@ def ingest_pboc(pages: int = 40) -> pd.DataFrame:
         lf = ["loans_total", "hh_total", "hh_short", "hh_medlong", "corp_total", "corp_short", "corp_medlong",
               "corp_bills", "nbfi_total"]
         rows += _rows_from_fields(_blocks_to_monthly(loan_recs, lf),
-                                  {f: "loans." + f.replace("nbfi_total", "nbfi").replace("loans_total", "total") for f in lf},
+                                  {f: "loans_text." + f.replace("nbfi_total", "nbfi").replace("loans_total", "total") for f in lf},
                                   "PBoC", "primary")
         tf = ["tsf_flow", *releases.TSF_COMPONENTS.values()]
         rows += _rows_from_fields(_blocks_to_monthly(tsf_recs, tf),
-                                  {f: ("tsf.flow" if f == "tsf_flow" else f"tsf.{f}") for f in tf}, "PBoC", "primary")
+                                  {f: ("tsf_text.flow" if f == "tsf_flow" else f"tsf_text.{f}") for f in tf}, "PBoC", "primary")
         for y, mth, _, b, raw, ts, url, pub in tsf_recs:
             if b.get("scope") == "stock" and "tsf_stock" in b and y:
                 per = _month_end(y, mth)
                 prov = store.Provenance("PBoC", "primary", url, raw, ts, pub or ts[:10], lineage="release_text:tsf_stock")
-                rows.append(store.make_rows("tsf.stock", pd.Series([b["tsf_stock"] / 10], index=[per]), prov))
-                rows.append(store.make_rows("tsf.stock_yoy", pd.Series([b["tsf_stock_yoy"]], index=[per]), prov))
+                rows.append(store.make_rows("tsf_text.stock", pd.Series([b["tsf_stock"] / 10], index=[per]), prov))
+                rows.append(store.make_rows("tsf_text.stock_yoy", pd.Series([b["tsf_stock_yoy"]], index=[per]), prov))
         for p, raw, ts, url, pub in money:
             per = _month_end(p["year"], p["month"])
             for k in ("m1_yoy", "m2_yoy"):
@@ -339,21 +339,36 @@ def ingest_ndrc(pages: int = 30) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
 
 
-def ingest_nbs_release_texts(pages: int = 160) -> pd.DataFrame:
-    """NBS monthly releases (www.stats.gov.cn/sj/zxfb): the primary NBS route, because the NBS
-    data portal refuses cloud IPs (HTTP 403). Parsed per release type:
+QUARTER_PHRASE = {"一季度": 3, "上半年": 6, "前三季度": 9, "全年": 12}
 
-        70个大中城市...变动情况   city-level new / second-hand indices from 表1 / 表2
-        全国固定资产投资          FAI YTD level and y/y, infrastructure / manufacturing / RE y/y
-    plus the release-type parsers registered in RELEASE_PARSERS (activity, prices, property).
-    """
+
+def title_period(title: str, url_date: str) -> pd.Timestamp | None:
+    """Reference period of an NBS release from its title (and URL date when the year is omitted)."""
+    y = re.search(r"(20\d\d)年", title)
+    ud = pd.Timestamp(url_date) if url_date else None
+    for ph, mth in QUARTER_PHRASE.items():
+        if ph in title and not re.search(r"\d{1,2}月", title):
+            year = int(y.group(1)) if y else (ud.year - 1 if (ud is not None and mth == 12) else ud.year if ud is not None else None)
+            return _month_end(year, mth) if year else None
+    ms = re.findall(r"(\d{1,2})月", title)
+    if not ms:
+        return _month_end(int(y.group(1)), 12) if y else None   # annual release, e.g. "2025年国民经济..."
+    mth = int(ms[-1])
+    year = int(y.group(1)) if y else (ud.year if ud is not None and mth <= ud.month else ud.year - 1 if ud is not None else None)
+    return _month_end(year, mth) if year else None
+
+
+def ingest_nbs_release_texts(pages: int = 70) -> pd.DataFrame:
+    """NBS monthly releases (www.stats.gov.cn/sj/zxfb, archive back to Nov 2021): the primary NBS
+    route, because the NBS data portal refuses cloud IPs (HTTP 403). One parser per release type
+    (RELEASE_PARSERS); every value carries the release URL and archived raw file."""
     rows, item_errors, counts = [], [], defaultdict(int)
     try:
-        lst = crawl("NBS", "https://www.stats.gov.cn/sj/zxfb/", r"20\d\d年", pages=pages)
+        lst = crawl("NBS", "https://www.stats.gov.cn/sj/zxfb/", r"(20\d\d年|\d月份|季度|上半年)", pages=pages)
         for item in lst:
-            m = re.search(r"(\d{4})年(?:1[—\-–])?(\d{1,2})月", item["title"])
             kind = next((k for k, (rx, _) in RELEASE_PARSERS.items() if re.search(rx, item["title"])), None)
-            if not m or kind is None:
+            per = title_period(item["title"], item["date"])
+            if kind is None or per is None:
                 continue
             try:
                 content, raw, ts = fetch("NBS", item["url"], ext="html")
@@ -361,17 +376,32 @@ def ingest_nbs_release_texts(pages: int = 160) -> pd.DataFrame:
                 item_errors.append(str(e)[:160])
                 continue
             html = content.decode("utf-8", errors="replace")
-            per = _month_end(int(m.group(1)), int(m.group(2)))
             prov = store.Provenance("NBS", "primary", item["url"], raw, ts, item["date"] or ts[:10],
                                     lineage=f"release_text:{kind}")
             try:
-                vals = RELEASE_PARSERS[kind][1](html)
+                vals = RELEASE_PARSERS[kind][1](html, per)
             except Exception as e:
                 item_errors.append(f"{item['url']}: parse {type(e).__name__}: {str(e)[:120]}")
                 continue
-            for sid, v in vals.items():
-                rows.append(store.make_rows(sid, pd.Series([v], index=[per]), prov))
+            for sid, (p, v) in vals.items():
+                rows.append(store.make_rows(sid, pd.Series([v], index=[p]), prov))
             counts[kind] += 1
+        # tier figures published in the urban-department interpretation (validation target)
+        for item in crawl("NBS", "https://www.stats.gov.cn/sj/sjjd/", r"商品住宅销售价格变动情况", pages=pages):
+            per = title_period(item["title"], item["date"])
+            if per is None:
+                continue
+            try:
+                text, raw, ts, _ = release_text("NBS", item["url"])
+            except FetchError as e:
+                item_errors.append(str(e)[:160])
+                continue
+            prov = store.Provenance("NBS", "primary", item["url"], raw, ts, item["date"] or ts[:10],
+                                    lineage="release_text:70city_interpretation")
+            for k, v in releases.nbs_tiers_interpretation(text).items():
+                tier, seg, h = k.split("_")
+                rows.append(store.make_rows(f"nbs_text.hp.{seg}.{tier}.{h}", pd.Series([v], index=[per]), prov))
+            counts["70city_interpretation"] += 1
         _status("NBS releases", bool(rows), releases_listed=len(lst), parsed=dict(counts), item_errors=item_errors[:20])
     except Exception as e:
         _status("NBS releases", False, error=f"{type(e).__name__}: {str(e)[:300]}")
@@ -385,29 +415,148 @@ def _text(html: str) -> str:
     return soup.get_text("\n")
 
 
-def _parse_70city(html: str) -> dict:
+def _at(per, d: dict) -> dict:
+    return {k: (per, v) for k, v in d.items()}
+
+
+def _parse_70city(html: str, per) -> dict:
     out = {}
     for seg, cities in releases.nbs_70city_tables(html).items():
         for city, (mom, yoy) in cities.items():
-            out[f"city70.{seg}.mom.{city}"] = mom
-            out[f"city70.{seg}.yoy.{city}"] = yoy
+            out[f"city70.{seg}.mom.{city}"] = (per, mom)
+            out[f"city70.{seg}.yoy.{city}"] = (per, yoy)
     return out
 
 
-def _parse_fai(html: str) -> dict:
+def _parse_fai(html: str, per) -> dict:
     t = _text(html)
-    p = releases.nbs_infra_fai(t)
-    out = {f"fai.{k}": v for k, v in p.items()}
+    out = {f"fai.{k}": v for k, v in releases.nbs_infra_fai(t).items()}
     lv = releases.nbs_fai_total(t)
     if lv:
         out["fai.ytd"], out["fai.ytd_yoy"] = lv
-    return out
+    return _at(per, out)
+
+
+def _parse_national(html: str, per) -> dict:
+    """'国民经济' overview: monthly m/m SA for retail and IP, plus GDP in quarter releases."""
+    t = _text(html)
+    out = {k: v for k, v in {**releases.nbs_retail(t), **releases.nbs_ip(t)}.items() if k.endswith("mom_sa_nbs")}
+    res = _at(per, out)
+    g = releases.nbs_gdp(t)
+    if g:
+        qi = g.get("q_index") or {3: 1, 6: 2, 9: 3, 12: 4}.get(per.month)
+        year = per.year if per.month >= 3 * (qi or 1) else per.year - 1
+        qend = _month_end(year, 3 * qi) if qi else None
+        if qend is not None:
+            m = {"q_real_yoy": "gdp.real_yoy", "q_sa_qoq": "gdp.sa_qoq", "ytd_nominal": "gdp.nominal_ytd",
+                 "ytd_real_yoy": "gdp.real_ytd_yoy"}
+            for i, nm in ((1, "primary"), (2, "secondary"), (3, "tertiary")):
+                m[f"s{i}_ytd_nominal"] = f"gdp.{nm}_nominal_ytd"
+                m[f"s{i}_ytd_real_yoy"] = f"gdp.{nm}_real_ytd_yoy"
+            for k, sid in m.items():
+                if k in g:
+                    res[sid] = (qend, g[k])
+    return res
 
 
 RELEASE_PARSERS = {
     "70city": (r"70个大中城市.*销售价格变动", _parse_70city),
     "fai": (r"全国固定资产投资", _parse_fai),
+    "retail": (r"社会消费品零售总额", lambda h, p: _at(p, releases.nbs_retail(_text(h)))),
+    "ip": (r"规模以上工业增加值", lambda h, p: _at(p, releases.nbs_ip(_text(h)))),
+    "property": (r"房地产市场基本情况|全国房地产开发投资", lambda h, p: _at(p, releases.nbs_property(_text(h)))),
+    "cpi": (r"居民消费价格", lambda h, p: _at(p, releases.nbs_cpi(_text(h)))),
+    "ppi": (r"工业生产者出厂价格", lambda h, p: _at(p, releases.nbs_ppi(_text(h)))),
+    "national": (r"国民经济", _parse_national),
 }
+
+
+# ------------------------------------------------------------------ PBoC statistics tables
+PBOC_STATS = "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html"
+PBOC_TABLES = {
+    "社会融资规模增量统计表": "tsf_flow", "社会融资规模存量统计表": "tsf_stock",
+    "货币供应量": "money", "金融机构人民币信贷收支表": "credit_rmb",
+}
+
+
+def _soup(source, url):
+    content, raw, ts = fetch(source, url, ext="html")
+    return BeautifulSoup(content.decode("utf-8", errors="replace"), "lxml"), raw, ts
+
+
+def pboc_table_urls(first_year: int = 2012) -> list[tuple[int, str, str, str]]:
+    """[(year, table kind, htm url, category url)] discovered from the PBoC statistics index."""
+    soup, _, _ = _soup("PBoC", PBOC_STATS)
+    years = {}
+    for a in soup.find_all("a"):
+        m = re.fullmatch(r"(20\d\d)年统计数据", (a.get_text() or "").strip())
+        if m and int(m.group(1)) >= first_year:
+            years[int(m.group(1))] = urljoin(PBOC_STATS, a["href"])
+    cats = defaultdict(list)
+    for a in soup.find_all("a"):
+        t = (a.get_text() or "").strip()
+        if t in ("社会融资规模", "货币统计概览", "金融机构信贷收支统计"):
+            cats[t].append(urljoin(PBOC_STATS, a["href"]))
+    out = []
+    for yr, yurl in sorted(years.items()):
+        prefix = yurl.rsplit("/", 2)[0] + "/" + yurl.rsplit("/", 2)[1] + "/"
+        for cname, urls in cats.items():
+            for cu in urls:
+                if not cu.startswith(prefix):
+                    continue
+                csoup, _, _ = _soup("PBoC", cu)
+                for tr in csoup.find_all("tr"):
+                    if tr.find("tr"):
+                        continue
+                    a = tr.find("a", href=re.compile(r"\.htm$"))
+                    if not a:
+                        continue
+                    label = re.sub(r"\s+", "", tr.get_text(" ", strip=True))
+                    kind = next((k for name, k in PBOC_TABLES.items() if label.startswith(name)), None)
+                    if kind:
+                        out.append((yr, kind, urljoin(cu, a["href"]), cu))
+    return out
+
+
+def ingest_pboc_tables(first_year: int = 2012) -> pd.DataFrame:
+    from .fetch import pboc_tables as PT
+
+    rows, errors, counts = [], [], defaultdict(int)
+    try:
+        urls = pboc_table_urls(first_year)
+        if not urls:
+            raise LookupError("no PBoC statistics tables discovered")
+        for yr, kind, url, cat in urls:
+            try:
+                content, raw, ts = fetch("PBoC", url, ext="htm")
+                html = PT.decode(content)
+                prov = store.Provenance("PBoC", "primary", url, raw, ts, ts[:10], lineage=f"pboc_table:{kind}:{yr}")
+                if kind == "tsf_flow":
+                    df = PT.tsf_flow_table(html)
+                    for col in df.columns:
+                        sid = "tsf.flow" if col == "flow" else f"tsf.{col}"
+                        rows.append(store.make_rows(sid, df[col] / 10, prov))
+                elif kind == "tsf_stock":
+                    df = PT.tsf_stock_table(html)
+                    tot = df[df.item == "stock"].set_index("period")
+                    rows.append(store.make_rows("tsf.stock", tot["stock"] * 1000, prov))
+                    rows.append(store.make_rows("tsf.stock_yoy", tot["yoy"], prov))
+                    gov = df[df.item == "govt_bonds"].set_index("period")
+                    if len(gov):
+                        rows.append(store.make_rows("tsf.govt_bonds_stock", gov["stock"] * 1000, prov))
+                elif kind == "money":
+                    for code, ser in PT.money_supply(html).items():
+                        rows.append(store.make_rows(f"money.{code.lower()}", ser.dropna() / 10, prov))
+                elif kind == "credit_rmb":
+                    for key, ser in PT.credit_rmb_loans(html).items():
+                        rows.append(store.make_rows(f"loans_stock.{key}", ser.dropna() / 10, prov))
+                counts[kind] += 1
+            except Exception as e:
+                errors.append(f"{yr} {kind}: {type(e).__name__}: {str(e)[:120]}")
+        _status("PBoC tables", bool(rows), tables=dict(counts), errors=errors[:20])
+    except Exception as e:
+        _status("PBoC tables", False, error=f"{type(e).__name__}: {str(e)[:300]}")
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
 
 
 PROBES = {
@@ -428,7 +577,9 @@ def run_all() -> pd.DataFrame:
         ok, msg = reachable(url)
         STATUS.setdefault("_reachability", {})[name] = {"url": url, "ok": ok, "detail": msg}
     frames = []
-    for fn in (ingest_nbs, ingest_nbs_release_texts, ingest_pboc, ingest_mof_lgb, ingest_ndrc):
+    # ingest_nbs (data portal) is not run: data.stats.gov.cn returns 403 to cloud runners; the
+    # release pages carry the same official figures and are the NBS route.
+    for fn in (ingest_nbs_release_texts, ingest_pboc_tables, ingest_pboc, ingest_mof_lgb, ingest_ndrc):
         try:
             frames.append(fn())
         except Exception:

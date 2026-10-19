@@ -273,3 +273,155 @@ def nbs_fai_total(text: str):
         return None
     g = float(mm.group(3))
     return float(mm.group(1)) / 10, (-g if mm.group(2) == "下降" else g)
+
+
+# ----------------------------------------------------------------------------- NBS releases
+def _sgn(verb: str, v: str) -> float:
+    return -float(v) if verb in ("下降", "减少") else float(v)
+
+
+def _first(rx: str, t: str):
+    return re.search(rx, t)
+
+
+def nbs_retail(text: str) -> dict:
+    """'1—9月份，社会消费品零售总额370001亿元，同比增长1.1%' and '9月份，社会消费品零售总额42433亿元，同比增长1.1%'."""
+    t = _clean(text)
+    out = {}
+    m = _first(r"1[—\-–]\d{1,2}月份,社会消费品零售总额" + NUM + r"亿元,同比(增长|下降)" + NUM + "%", t)
+    if m:
+        out["retail.ytd"], out["retail.ytd_yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
+    m = _first(r"(?<![—\-–\d])\d{1,2}月份,社会消费品零售总额" + NUM + r"亿元,同比(增长|下降)" + NUM + r"%(?:,环比(增长|下降)" + NUM + "%)?", t)
+    if m:
+        out["retail.level"], out["retail.yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
+        if m.group(4):
+            out["retail.mom_sa_nbs"] = _sgn(m.group(4), m.group(5))
+    return out
+
+
+def nbs_ip(text: str) -> dict:
+    t = _clean(text)
+    out = {}
+    m = _first(r"(?<![—\-–\d])\d{1,2}月份,(?:全国)?规模以上工业增加值同比(?:实际)?(增长|下降)" + NUM + "%", t)
+    if m:
+        out["ip.yoy"] = _sgn(m.group(1), m.group(2))
+    m = _first(r"规模以上工业增加值比上月(增长|下降)" + NUM + "%", t) or _first(r"规模以上工业增加值同比(?:实际)?(?:增长|下降)[\d.]+%,环比(增长|下降)" + NUM + "%", t)
+    if m:
+        out["ip.mom_sa_nbs"] = _sgn(m.group(1), m.group(2))
+    m = _first(r"1[—\-–]\d{1,2}月份,(?:全国)?规模以上工业增加值同比(增长|下降)" + NUM + "%", t)
+    if m:
+        out["ip.ytd_yoy"] = _sgn(m.group(1), m.group(2))
+    for name, sid in [("水泥", "proxy.cement_yoy"), ("钢材", "proxy.steel_yoy"), ("发电量", "proxy.power_yoy")]:
+        m = _first(name + NUM + r"(?:万吨|亿千瓦时),(?:同比)?(增长|下降)" + NUM + "%", t)
+        if m:
+            out[sid] = _sgn(m.group(2), m.group(3))
+    return out
+
+
+def nbs_property(text: str) -> dict:
+    """YTD levels (RMB bn; mn sqm) and YTD y/y from '全国房地产市场基本情况'."""
+    t = _clean(text)
+    out = {}
+    pats = [
+        (r"全国房地产开发投资" + NUM + r"亿元,(?:比上年|同比)(增长|下降)" + NUM, "fai.re_ytd", 0.1),
+        (r"房屋新开工面积" + NUM + r"万平方米,(?:同比)?(增长|下降)" + NUM, "re.starts_ytd", 0.01),
+        (r"房屋竣工面积" + NUM + r"万平方米,(?:同比)?(增长|下降)" + NUM, "re.completions_ytd", 0.01),
+        (r"新建商品房销售面积" + NUM + r"万平方米,(?:比上年|同比)?(增长|下降)" + NUM, "re.sales_ytd", 0.01),
+    ]
+    for rx, sid, sc in pats:
+        m = _first(rx, t)
+        if m:
+            out[sid] = float(m.group(1)) * sc
+            out[f"{sid}_yoy"] = _sgn(m.group(2), m.group(3))
+    m = _first(r"国房景气指数为?" + NUM, t)
+    if m:
+        out["re.climate"] = float(m.group(1))
+    return out
+
+
+def nbs_cpi(text: str) -> dict:
+    t = _clean(text)
+    out = {}
+    m = _first(r"全国居民消费价格同比(上涨|下降)" + NUM + "%", t)
+    if m:
+        out["prices.cpi_yoy"] = _sgn(m.group(1), m.group(2))
+    m = _first(r"全国居民消费价格同比持平", t)
+    if m and "prices.cpi_yoy" not in out:
+        out["prices.cpi_yoy"] = 0.0
+    m = _first(r"消费品价格(上涨|下降)" + NUM + "%", t)
+    if m:
+        out["prices.cpi_goods_yoy"] = _sgn(m.group(1), m.group(2))
+    return out
+
+
+def nbs_ppi(text: str) -> dict:
+    t = _clean(text)
+    m = _first(r"全国工业生产者出厂价格同比(上涨|下降)" + NUM + "%", t)
+    return {"prices.ppi_yoy": _sgn(m.group(1), m.group(2))} if m else {}
+
+
+QUARTER_WORD = {"一季度": 1, "二季度": 2, "三季度": 3, "四季度": 4}
+
+
+def nbs_gdp(text: str) -> dict:
+    """GDP block in the quarterly '国民经济' release (Jan / Apr / Jul / Oct).
+
+    Returns keys with the quarter they refer to resolved by the caller:
+      ytd_nominal, ytd_real_yoy, sector_{1,2,3}_ytd_nominal / _ytd_real_yoy,
+      q_real_yoy (latest quarter), q_sa_qoq (latest quarter)."""
+    t = _clean(text)
+    out = {}
+    m = _first(r"初步核算,(?:20\d\d年)?(?:一季度|上半年|前三季度|全年)?国内生产总值" + NUM + r"亿元,按不变价格计算,(?:比上年|同比)(增长|下降)" + NUM + "%", t)
+    if m:
+        out["ytd_nominal"], out["ytd_real_yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
+    for i, name in enumerate(["第一产业", "第二产业", "第三产业"], 1):
+        m = _first(name + r"增加值" + NUM + r"亿元,(?:比上年|同比)?(增长|下降)" + NUM + "%", t)
+        if m:
+            out[f"s{i}_ytd_nominal"], out[f"s{i}_ytd_real_yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
+    # quarterly y/y: '分季度看,一季度国内生产总值同比增长5.4%,二季度增长5.2%,三季度增长4.8%'
+    seg = _first(r"分季度看,([^。]*)", t)
+    if seg:
+        qs = re.findall(r"(一季度|二季度|三季度|四季度)(?:国内生产总值)?(?:同比)?(增长|下降)" + NUM + "%", seg.group(1))
+        if qs:
+            q, verb, v = qs[-1]
+            out["q_index"], out["q_real_yoy"] = QUARTER_WORD[q], _sgn(verb, v)
+    m = _first(r"从环比看,(一季度|二季度|三季度|四季度)国内生产总值(增长|下降)" + NUM + "%", t)
+    if m:
+        out["q_sa_qoq"] = _sgn(m.group(2), m.group(3))
+        out.setdefault("q_index", QUARTER_WORD[m.group(1)])
+    return out
+
+
+def nbs_tiers_interpretation(text: str) -> dict:
+    """Tier m/m and y/y (%) from the NBS urban-department interpretation of the 70-city data."""
+    t = _clean(text)
+    out = {}
+    segs = {"新建商品住宅": "new", "二手住宅": "used"}
+    tiers = {"一线": "tier1", "二线": "tier2", "三线": "tier3"}
+    for seg_cn, seg in segs.items():
+        for h_cn, h in (("环比", "mom"), ("同比", "yoy")):
+            # combined statement for tiers 2 and 3
+            m = _first(r"二、三线城市" + seg_cn + r"销售价格" + h_cn + r"分别(上涨|下降)?" + NUM + r"%和(上涨|下降)?" + NUM + "%", t)
+            if m:
+                v1 = m.group(1) or ""
+                v2 = m.group(3) or v1
+                out[f"tier2_{seg}_{h}"] = _sgn(v1, m.group(2))
+                out[f"tier3_{seg}_{h}"] = _sgn(v2, m.group(4))
+            for tcn, tk in tiers.items():
+                key = f"{tk}_{seg}_{h}"
+                if key in out:
+                    continue
+                m = _first(tcn + r"城市" + seg_cn + r"销售价格" + h_cn + r"([^,;。]*)", t)
+                if not m:
+                    continue
+                phrase = m.group(1)
+                z = re.search(r"转为(上涨|下降)" + NUM + "%", phrase)
+                if z:
+                    out[key] = _sgn(z.group(1), z.group(2))
+                elif re.match(r"持平|由[^,]*转为持平", phrase):
+                    out[key] = 0.0
+                else:
+                    z = re.match(r"(上涨|下降)" + NUM + "%", phrase)
+                    if z:
+                        out[key] = _sgn(z.group(1), z.group(2))
+    return out

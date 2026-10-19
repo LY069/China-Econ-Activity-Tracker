@@ -40,11 +40,20 @@ reg("gdp.contrib_investment", "Gross capital formation contribution to GDP growt
 reg("gdp.contrib_netexports", "Net exports contribution to GDP growth", "pp", "A", "GDP", "contrib",
     nbs=("hgnd", r"三大需求", r"货物和服务净出口拉动"))
 
+reg("gdp.nominal_ytd", "GDP, nominal, year-to-date", "RMB bn", "Q", "GDP", "ytd_level")
+reg("gdp.real_ytd_yoy", "GDP real growth, year-to-date y/y", "%", "Q", "GDP", "ytd_yoy")
+for _s, _n in (("primary", "Primary"), ("secondary", "Secondary"), ("tertiary", "Tertiary")):
+    reg(f"gdp.{_s}_nominal_ytd", f"{_n} industry VA, nominal, YTD", "RMB bn", "Q", "GDP", "ytd_level")
+    reg(f"gdp.{_s}_real_ytd_yoy", f"{_n} industry VA real growth, YTD y/y", "%", "Q", "GDP", "ytd_yoy")
+    reg(f"gdp.contrib_{_s}", f"{_n} industry contribution to YTD real GDP growth (tracker est.)", "pp", "Q", "GDP", "contrib")
+
 # ---------------- Official: activity ----------------
 reg("ip.yoy", "Industrial value-added, y/y", "%", "M", "Industry", "yoy",
     nbs=("hgyd", r"工业/工业增加值增长速度", r"^工业增加值_同比增长"))
 reg("ip.ytd_yoy", "Industrial value-added, YTD y/y", "%", "M", "Industry", "ytd_yoy",
     nbs=("hgyd", r"工业/工业增加值增长速度", r"^工业增加值_累计增长"))
+reg("ip.mom_sa_nbs", "Industrial value-added, m/m SA (NBS)", "%", "M", "Industry", "mom")
+reg("retail.mom_sa_nbs", "Retail sales, m/m SA (NBS)", "%", "M", "Consumption", "mom")
 reg("retail.level", "Retail sales, month", "RMB bn", "M", "Consumption", "level",
     nbs=("hgyd", r"国内贸易/社会消费品零售总额", r"^社会消费品零售总额_当期值"), scale=0.1)
 reg("retail.ytd", "Retail sales, YTD", "RMB bn", "M", "Consumption", "ytd_level",
@@ -91,7 +100,7 @@ reg("prices.ppi_yoy", "PPI, y/y", "%", "M", "Prices", "yoy",
 # ---------------- Physical proxies (validation only) ----------------
 reg("proxy.cement_yoy", "Cement output, y/y", "%", "M", "Proxies", "yoy",
     nbs=("hgyd", r"工业/.*产品产量.*", r"^水泥产量_同比增长"))
-reg("proxy.steel_yoy", "Crude steel output, y/y", "%", "M", "Proxies", "yoy",
+reg("proxy.steel_yoy", "Steel products output, y/y", "%", "M", "Proxies", "yoy",
     nbs=("hgyd", r"工业/.*产品产量.*", r"^粗钢产量_同比增长"))
 reg("proxy.power_yoy", "Power generation, y/y", "%", "M", "Proxies", "yoy",
     nbs=("hgyd", r"(工业|能源)/.*(产品产量|发电量).*", r"^发电量_同比增长"))
@@ -121,6 +130,17 @@ for k, n in [("loans.total", "New RMB loans, total"), ("loans.hh_total", "Househ
              ("loans.corp_medlong", "Corporate medium/long-term loans"), ("loans.corp_bills", "Corporate bill financing"),
              ("loans.nbfi", "Loans to non-bank financial institutions")]:
     reg(k, n, "RMB bn", "M", "Credit", "flow", pboc="loans")
+
+reg("money.m0", "M0, end-period", "RMB bn", "M", "Credit", "stock")
+reg("tsf.govt_bonds_stock", "TSF stock: government bonds", "RMB bn", "M", "Credit", "stock")
+for k in ("total", "hh_total", "hh_short", "hh_medlong", "corp_total", "corp_short", "corp_medlong", "corp_bills",
+          "corp_leases", "corp_advances", "nbfi"):
+    reg(f"loans_stock.{k}", f"RMB loan stock: {k} (PBoC credit table)", "RMB bn", "M", "Credit", "stock", pboc="table")
+    reg(f"loans_text.{k}", f"New RMB loans as reported in PBoC release text: {k}", "RMB bn", "M", "Credit", "flow")
+reg("loans.corp_leases", "Corporate financial leases (flow)", "RMB bn", "M", "Credit", "flow")
+reg("loans.corp_advances", "Corporate advances (flow)", "RMB bn", "M", "Credit", "flow")
+for k in ("flow", "rmb_loans", "govt_bonds", "stock", "stock_yoy"):
+    reg(f"tsf_text.{k}", f"TSF {k} as reported in PBoC release text", "RMB bn" if k != "stock_yoy" else "%", "M", "Credit", "flow")
 
 # ---------------- High-frequency: government bonds ----------------
 for k, n in [("cgb.regular", "Central govt bonds: regular, gross issuance"),

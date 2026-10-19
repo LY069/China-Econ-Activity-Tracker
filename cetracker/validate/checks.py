@@ -43,6 +43,22 @@ def identity(get, cid, desc, total, parts, tol_abs, tol_rel=0.0, group="Accounti
                 f"max |diff| {df['diff'].abs().max():.2f} bn", _exc_list(df, ["total", "sum_parts", "diff"]))
 
 
+def pair_check(get, cid, group, desc, a_id, b_id, tol_abs, warn_only=False):
+    a, b = get(a_id), get(b_id)
+    if a.empty or b.empty:
+        return _missing(cid, group, desc, [x for x, s in ((a_id, a), (b_id, b)) if s.empty])
+    idx = a.index.intersection(b.index)
+    if not len(idx):
+        return _missing(cid, group, desc, ["no overlapping periods"])
+    df = pd.DataFrame({"computed": a[idx], "published": b[idx]})
+    df["diff"] = df["computed"] - df["published"]
+    df["exception"] = df["diff"].abs() > tol_abs
+    n = int(df["exception"].sum())
+    st = "PASS" if n == 0 else ("WARN" if warn_only else "FAIL")
+    return _rec(cid, group, desc, st, len(df), n, f"{tol_abs}", f"mean |diff| {df['diff'].abs().mean():.3f}; max {df['diff'].abs().max():.3f}",
+                _exc_list(df, ["computed", "published", "diff"]))
+
+
 def ytd_roundtrip(get, ytd_id):
     desc = f"Single months (Jan/Feb split) sum back to published YTD: {ytd_id}"
     cid = f"ytd_roundtrip:{ytd_id}"
@@ -149,7 +165,7 @@ def cgb_reconciliation(get, tol_rel=0.15):
                 "; ".join(f"{r['period']}: {r['implied_cgb_net']} vs {r['npc_central_quota']}" for r in rows), exc)
 
 
-def stock_flow_consistency(get, tol_rel=0.02):
+def stock_flow_consistency(get, tol_rel=0.02):  # noqa: ARG001
     cid = "recon:tsf_stock_yoy"
     desc = "TSF stock y/y computed from published stocks vs published stock y/y (PBoC comparable basis)"
     if get("tsf.stock").empty or get("tsf.stock_yoy").empty:
@@ -197,18 +213,35 @@ def proxy_agreement(get, target="fai.ytd~cyoy", proxies=("proxy.cement_yoy", "pr
 
 def run(get) -> list[dict]:
     R = []
-    R.append(identity(get, "id:hh_loans", "Household loans = short-term + medium/long-term", "loans.hh_total",
-                      ["loans.hh_short", "loans.hh_medlong"], tol_abs=10))
-    R.append(identity(get, "id:corp_loans", "Corporate loans = short + medium/long + bills (residual: leasing/other)",
-                      "loans.corp_total", ["loans.corp_short", "loans.corp_medlong", "loans.corp_bills"],
-                      tol_abs=10, tol_rel=0.08, warn_only=True))
-    R.append(identity(get, "id:loans_sector", "Total RMB loans = household + corporate + NBFI (residual: govt agencies)",
-                      "loans.total", ["loans.hh_total", "loans.corp_total", "loans.nbfi"], tol_abs=20, tol_rel=0.05,
-                      warn_only=True))
+    R.append(identity(get, "id:hh_loan_stock", "Household loan stock = short + medium/long (PBoC credit table)",
+                      "loans_stock.hh_total", ["loans_stock.hh_short", "loans_stock.hh_medlong"], tol_abs=0.1))
+    R.append(identity(get, "id:corp_loan_stock",
+                      "Corporate loan stock = short + medium/long + bills + leases + advances (PBoC credit table)",
+                      "loans_stock.corp_total", ["loans_stock.corp_short", "loans_stock.corp_medlong", "loans_stock.corp_bills",
+                                                 "loans_stock.corp_leases", "loans_stock.corp_advances"], tol_abs=0.1))
+    R.append(identity(get, "id:loans_sector",
+                      "Domestic RMB loans: total vs household + corporate + NBFI (residual = overseas loans)",
+                      "loans_stock.total", ["loans_stock.hh_total", "loans_stock.corp_total", "loans_stock.nbfi"],
+                      tol_abs=50, tol_rel=0.02, warn_only=True))
     R.append(identity(get, "id:tsf_components",
-                      "TSF flow = listed components (incomplete without ABS & write-offs: reported as WARN)",
+                      "TSF flow = published components (residual = PBoC's unpublished 'other' category: WARN, logged)",
                       "tsf.flow", ["tsf.rmb_loans", "tsf.fx_loans", "tsf.entrusted", "tsf.trust", "tsf.undiscounted_ba",
-                                   "tsf.corp_bonds", "tsf.govt_bonds", "tsf.equity"], tol_abs=50, tol_rel=0.05, warn_only=True))
+                                   "tsf.corp_bonds", "tsf.govt_bonds", "tsf.equity", "tsf.abs", "tsf.writeoffs"],
+                      tol_abs=50, tol_rel=0.05, warn_only=True))
+    R.append(pair_check(get, "recon:loans_table_vs_text", "Cross-source reconciliation",
+                        "New household loans: PBoC credit-table stock change vs PBoC release text (YTD-differenced)",
+                        "loans.hh_total", "loans_text.hh_total", tol_abs=30, warn_only=True))
+    R.append(pair_check(get, "recon:loans_corp_table_vs_text", "Cross-source reconciliation",
+                        "New corporate loans: PBoC credit-table stock change vs PBoC release text",
+                        "loans.corp_total", "loans_text.corp_total", tol_abs=50, warn_only=True))
+    R.append(pair_check(get, "recon:tsf_table_vs_text", "Cross-source reconciliation",
+                        "TSF monthly flow: PBoC statistics table vs PBoC release text", "tsf.flow", "tsf_text.flow", tol_abs=5))
+    R.append(pair_check(get, "recon:m2_yoy", "Published y/y reproduction",
+                        "M2 y/y computed from PBoC money-supply levels vs published", "money.m2~yoy_calc", "money.m2_yoy",
+                        tol_abs=0.15, warn_only=True))
+    R.append(pair_check(get, "recon:m1_yoy", "Published y/y reproduction",
+                        "M1 y/y computed from levels vs published (2025 redefinition: 2025 exceptions expected)",
+                        "money.m1~yoy_calc", "money.m1_yoy", tol_abs=0.15, warn_only=True))
     R.append(identity(get, "id:lgb_total", "Local bonds: new + refinancing = total issuance", "lgb.total",
                       ["lgb.new_total", "lgb.refi_total"], tol_abs=1.0))
     R.append(identity(get, "id:lgb_new", "Local bonds: new general + new special = new total", "lgb.new_total",

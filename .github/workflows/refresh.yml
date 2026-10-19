@@ -23,7 +23,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,6 +39,14 @@ jobs:
             echo "$(curl -s -o /dev/null -w '%{http_code}' -m 20 -A 'Mozilla/5.0' "$u") $u"; done
       - name: Build (fetch, derive, analyse, validate, export)
         run: python -m cetracker.build
+      - name: Fail if the store is empty
+        run: |
+          python - <<'PY'
+          import json, sys
+          m = json.load(open("site/data/meta.json"))
+          print("rows:", m["n_rows"], "series:", m["n_series"])
+          sys.exit(1 if m["n_rows"] == 0 else 0)
+          PY
       - name: Fail on FAIL-status validation checks
         run: |
           python - <<'PY'

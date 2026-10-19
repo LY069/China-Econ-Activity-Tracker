@@ -1,6 +1,7 @@
 """HTTP with raw-response archiving. Every fetched byte is saved before parsing.
 
-Raw files are content-addressed: data/raw/<source>/<request-hash>/<content-hash>.<ext>,
+Raw files are content-addressed and gzip-compressed:
+data/raw/<source>/<request-hash>/<content-hash>.<ext>.gz (read with read_raw()),
 with a .meta.json beside each (url, params, status, first retrieved_at). An unchanged
 response re-uses the existing file untouched, so scheduled refreshes do not change the
 repository unless the source actually changed. Cache-busting params (k1, t, _) are left
@@ -9,6 +10,7 @@ dashboard number can be traced to the exact response it was parsed from.
 """
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -63,12 +65,12 @@ def fetch(source: str, url: str, params: dict | None = None, data: dict | None =
                 ts = now_utc()
                 ch = hashlib.sha1(r.content).hexdigest()[:16]
                 d.mkdir(parents=True, exist_ok=True)
-                path = d / f"{ch}.{ext}"
+                path = d / f"{ch}.{ext}.gz"
                 meta_p = d / f"{ch}.meta.json"
                 if path.exists() and meta_p.exists():
                     meta = json.loads(meta_p.read_text())
                 else:
-                    path.write_bytes(r.content)
+                    path.write_bytes(gzip.compress(r.content, mtime=0))
                     meta = {"url": r.url, "request_url": url, "params": params, "data": data, "method": method,
                             "status": r.status_code, "first_retrieved_at": ts,
                             "bytes": len(r.content), "content_type": r.headers.get("Content-Type", "")}
@@ -87,3 +89,12 @@ def reachable(url: str, timeout: int = 10) -> tuple[bool, str]:
         return r.status_code < 500, f"HTTP {r.status_code}"
     except requests.RequestException as e:
         return False, repr(e)[:200]
+
+
+def read_raw(path: str | Path) -> bytes:
+    """Bytes of an archived raw response (transparently handles .gz)."""
+    p = Path(path)
+    if not p.is_absolute():
+        p = ROOT / p
+    b = p.read_bytes()
+    return gzip.decompress(b) if p.suffix == ".gz" else b

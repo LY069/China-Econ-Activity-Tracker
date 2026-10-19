@@ -158,3 +158,19 @@ def test_store_rejects_untraceable_rows():
     bad2 = store.make_rows("x", s, store.Provenance("tracker", "derived"))
     with pytest.raises(ValueError):
         store.validate(bad2)
+
+
+def test_title_period():
+    from cetracker.ingest import title_period
+    assert title_period("1—7月份国民经济保持总体平稳", "2026-08-17") == pd.Timestamp("2026-07-31")
+    assert title_period("2025年国民经济回升向好", "2026-01-17") == pd.Timestamp("2025-12-31")
+    assert title_period("前三季度国民经济运行稳中有进", "2026-10-20") == pd.Timestamp("2026-09-30")
+    assert title_period("2026年1—9月份社会消费品零售总额增长1.1%", "2026-10-19") == pd.Timestamp("2026-09-30")
+
+
+def test_tier_interpretation_phrasing():
+    t = ("一线城市新建商品住宅销售价格环比上涨0.1%，涨幅与上月相同。二线城市新建商品住宅销售价格环比由上月下降0.1%转为持平。"
+         "二、三线城市新建商品住宅销售价格同比分别下降2.4%和3.9%，降幅分别收窄。")
+    p = R.nbs_tiers_interpretation(t)
+    assert p["tier1_new_mom"] == 0.1 and p["tier2_new_mom"] == 0.0
+    assert p["tier2_new_yoy"] == -2.4 and p["tier3_new_yoy"] == -3.9
