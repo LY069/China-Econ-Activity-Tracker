@@ -26,9 +26,10 @@ NOTES: dict[str, str] = {}
 # months where consecutive PBoC credit-table stocks are on different statistical scopes
 STOCK_SCOPE_BREAKS = {"2023-01-31": "PBOC_SCOPE_2023"}
 # TSF definition segments (config/breaks.yaml TSF_DEF_2017): flows are on the current definition
-# from 2017-01 (PBoC's restated block); stock tables switch definition at 2018-01 and 2019-01
+# from 2017-01 (PBoC's restated block); stock tables switch definition at 2018-01 and 2019-01, and
+# their scope widens at 2023-01 (PBOC_SCOPE_2023: computed 2023 y/y runs ~0.33pp above published)
 TSF_FLOW_CURRENT_DEF = pd.Timestamp("2017-01-31")
-TSF_STOCK_DEF_STARTS = ("2018-01-31", "2019-01-31")
+TSF_STOCK_DEF_STARTS = ("2018-01-31", "2019-01-31", "2023-01-31")
 
 class Deriver:
     def __init__(self, obs: pd.DataFrame):

@@ -301,3 +301,12 @@ def test_comparable_base_and_gdp_fill_cap():
     m = C.gdp_4q_monthly(q, pd.date_range("2024-01-31", "2024-06-30", freq="ME"))
     assert m[pd.Timestamp("2024-01-31")] == 40 and m[pd.Timestamp("2024-03-31")] == 40
     assert np.isnan(m[pd.Timestamp("2024-04-31".replace("31", "30"))])
+
+
+def test_mof_new_bond_wordings():
+    b = R.mof_local_bonds("2022年9月,全国发行新增地方政府债券322亿元,其中一般债券81亿元、专项债券241亿元。"
+                          "全国发行再融资债券2689亿元,其中一般债券1723亿元、专项债券966亿元。")["blocks"][0]
+    assert (b["new_total"], b["new_general"], b["new_special"], b["refi_total"]) == (322.0, 81.0, 241.0, 2689.0)
+    b = R.mof_local_bonds("2020年1月,全国发行地方政府债券7850.64亿元。其中,发行一般债券702.43亿元,"
+                          "发行专项债券7148.21亿元;按用途划分,全部为新增债券。")["blocks"][0]
+    assert b["new_total"] == 7850.64 and b["refi_total"] == 0.0 and b["new_special"] == 7148.21

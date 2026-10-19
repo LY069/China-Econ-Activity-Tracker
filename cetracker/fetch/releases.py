@@ -156,8 +156,9 @@ def mof_local_bonds(text: str) -> dict:
     if m:
         out["year"], out["month"] = int(m.group(1)), int(m.group(2))
     pats = {
-        "new": r"发行新增债券" + NUM + r"亿元(?:,其中一般债券" + NUM + r"亿元、专项债券" + NUM + r"亿元)?",
-        "refi": r"发行再融资债券" + NUM + r"亿元(?:,其中一般债券" + NUM + r"亿元、专项债券" + NUM + r"亿元)?",
+        # '发行新增债券845亿元' and, in 2022-23, '发行新增地方政府债券322亿元'
+        "new": r"发行新增(?:地方政府)?债券" + NUM + r"亿元(?:,其中一般债券" + NUM + r"亿元、专项债券" + NUM + r"亿元)?",
+        "refi": r"发行再融资(?:地方政府)?债券" + NUM + r"亿元(?:,其中一般债券" + NUM + r"亿元、专项债券" + NUM + r"亿元)?",
     }
     for scope, n, chunk in chunks_by_period(t):
         blk = {}
@@ -167,6 +168,12 @@ def mof_local_bonds(text: str) -> dict:
                 blk[f"{k}_total"] = float(mm.group(1))
                 if mm.group(2) is not None:
                     blk[f"{k}_general"], blk[f"{k}_special"] = float(mm.group(2)), float(mm.group(3))
+        # months with no refinancing: '发行一般债券702.43亿元,发行专项债券7148.21亿元;按用途划分,全部为新增债券'
+        if "new_total" not in blk and re.search(r"按用途划分,全部为新增债券", chunk):
+            mm = re.search(r"发行一般债券" + NUM + r"亿元,(?:发行)?专项债券" + NUM + r"亿元", chunk)
+            if mm:
+                g, sp = float(mm.group(1)), float(mm.group(2))
+                blk.update(new_total=round(g + sp, 2), new_general=g, new_special=sp, refi_total=0.0)
         for k, p in {"total": r"发行地方政府债券(?:合计)?" + NUM + "亿元",
                      "redemption": r"到期偿还本金" + NUM + "亿元",
                      "swap_refi": r"置换存量隐性债务[^,;。]{0,12}?" + NUM + "亿元"}.items():

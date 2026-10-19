@@ -268,10 +268,11 @@ def cgb_reconciliation(get, tol_rel=0.15):
 
 def stock_flow_consistency(get, tol_rel=0.02):  # noqa: ARG001
     cid = "recon:tsf_stock_yoy"
-    desc = "TSF stock y/y computed from published stocks vs published stock y/y (PBoC comparable basis)"
-    if get("tsf.stock").empty or get("tsf.stock_yoy").empty:
-        return _missing(cid, "Cross-source reconciliation", desc, ["tsf.stock", "tsf.stock_yoy"])
-    calc = C.stock_yoy(get("tsf.stock"))
+    desc = ("TSF stock y/y computed from published stocks within a definition segment vs published stock y/y "
+            "(PBoC comparable basis; 2018, 2019 and 2023 cross a stock-table definition or scope change and are not computed)")
+    if get("tsf.stock~yoy_calc").empty or get("tsf.stock_yoy").empty:
+        return _missing(cid, "Cross-source reconciliation", desc, ["tsf.stock~yoy_calc", "tsf.stock_yoy"])
+    calc = get("tsf.stock~yoy_calc")
     pub = get("tsf.stock_yoy")
     idx = calc.index.intersection(pub.index)
     df = pd.DataFrame({"computed": calc[idx], "published": pub[idx]})

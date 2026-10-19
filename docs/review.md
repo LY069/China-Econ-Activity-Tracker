@@ -60,4 +60,44 @@ before it was fixed.
 
 ## Round 2 (audit of commit f6d4352)
 
-*Pending: the second-round report and its resolutions will be added here.*
+The reviewer worked on a copy of the repository and rebuilt everything from the raw archive, both
+incrementally and from an empty store. Its spot checks against official figures all matched: GDP
+levels and growth 2021–25, FAI 2021–24, retail, IP, PPI, M1/M2 2018+, and TSF annual totals.
+Round-1 verdicts across the 15 findings and 9 suspected items: 14 resolved, 6 partially
+resolved, 1 disputed correctly (FAI is not price-adjusted), 2 not resolved (the latent chain-level
+gap and the non-HAC Chow test, both documented), and 1 documented approximation. The partial ones
+(5, 6, 12, 13, 14 and B4) are covered by A2–A6, A14 and B4 below. The reviewer's summary was that the conclusions ("no robust lead"; "the FAI nowcast
+does not beat AR") are computed correctly, but that five defects still put wrong numbers on charts
+or in the vintage store.
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| A1 | Major | TSF flows were spliced across a definition change at 2017-01 (2016: 17.8 trn on the old definition; 2017: 26.2 trn on the current one), creating a 2017–18 hump in the impulse. Not in the break register. | Break `TSF_DEF_2017` registered. Rolling sums and impulses use flows from 2017-01. Stock tables are never restated (jumps at 2018-01, 2019-01, and a scope change at 2023-01), so stock y/y from levels is computed only within a segment. The impulse denominator is the comparable year-ago stock, S_t / (1 + published y/y). `recon:tsf_stock_yoy` went from WARN (mean gap 1.94 pp) to PASS (81 months, mean 0.03 pp). The impulse now starts in 2018-12. |
+| A2 | Major | The GDP denominator of the impulse was forward-filled without limit (one 4Q sum used for 24 months). | The fill is capped at the current quarter (2 months after the release month); beyond that the denominator is missing. Unit test added. |
+| A3 | Major | Derived vintages gave look-ahead: 159 rows were dated before their period (split January rows took December's release date), and two-sided SA rows took per-period dates. | A derived month the input never has takes the vintage of the input's next observation (January takes the Jan–Feb release date, e.g. 2024-01 → 2024-03-22). Two-sided transforms (SA and everything built on it) take the latest input vintage. There is a floor at the day after the period end. A new check, `vintage:order`, fails on any row dated on or before its period end; it passes with 0 rows. |
+| A4 | Major | The debt-swap proxy was shown as % of the RMB 2 trn swap quota (140% in 2025). | It is shown in RMB bn only. The chart and limitations say it includes ordinary rollover of special bonds and overstates the swap. |
+| A5 | Major | Build output depended on the previous store: `lgb.new_total~impulse_stk` was read before it was computed. | The deriver ignores stored derived rows and runs its steps in dependency order (bonds before credit). Verified by a replay from an empty store. |
+| A6 | Major | Local-bond history was lost: `lgb.new_total` began in 2021-11 although MOF states the new total from 2018-10. | `lgb.new_total` uses MOF's stated figure, falling back to general + special. The rebuild then exposed a parser gap: the 2022–23 wording "发行新增地方政府债券", and January 2020's "全部为新增债券", were not matched, leaving 9 months missing. Both are fixed, with a test. |
+| A7 | Minor | December infrastructure FAI was never parsed ("比上年增长"). | Regex fixed. Coverage checks were added for infrastructure and manufacturing FAI and pass, with December present every year. |
+| A8 | Minor | The pre-2021 M1–M2 gap from table levels differs from published y/y by up to ~1.2 pp. | The chart subtitle states the source switch and the size of the discrepancy; points are flagged `from_levels`. |
+| A9 | Minor | NBS retail m/m SA has only 5 observations (the revision table is not parsed). | Documented in limitations. |
+| A10 | Minor | 621 rows for Nov–Dec 2022 carried the migration date as vintage. | URL dates equal to the migration date are never treated as publication dates; those rows get an estimated vintage, flagged. |
+| A11 | Minor | The app and docs disagreed with the code: "four tests", "need 48", README "DM tests", nowcast docstring L = 0, and the methods note on lags. | All aligned. The app lists all six criteria. Methods §3.1 describes the own-calendar lags for the target and their consequences, including the reviewer's size simulation (6.5% at a fixed lag). |
+| A12 | Minor | The stated reason for withdrawing "M1–M2 → IP" overclaimed: the influence check alone does not reject it (r = 0.33 against a band of 0.28). | Corrected in methods §3.1 and above. The claim fails on stability: without 2020–22 the best lead moves to 10 months with the opposite sign. It is also disclosed that the extra criteria were added after this result was seen. |
+| A13 | Minor | FAI SA m/m showed extreme January values from the even Jan/Feb split. | January is masked; February shows the Jan–Feb average against December, flagged. A remaining large February 2026 value is in the official data: comparable growth goes from −15.1% (December 2025) to +1.8% (Jan–Feb 2026). |
+| A14 | Minor | Data was committed even when a check FAILed. | A failed build commits only the raw archive. The store and app data stay at the last good build. |
+| A15 | Minor | `title_period` could fall back to the URL year for half-year titles on migrated pages. | The release-date line is tried first; on a migrated page with no year in the title or text, the period is rejected rather than guessed. |
+| A16 | Minor | February `retail.level` rows had no Jan–Feb flag. | Flagged `janfeb_combined` at ingest, together with February `retail.yoy` and `ip.yoy`. |
+| B1 | Minor | `influence_check` ignored sign. | It drops the pairs contributing most in the direction of the correlation. |
+| B2 | Minor | The Granger criterion used a homoskedastic F test. | The criterion is the HAC Wald test; the F test is still reported. |
+| B3 | Minor | `survives_ex_covid` accepted a robust lead at any lag. | It now requires the same lead. |
+| B4 | Minor | Prewhitening mixes calendars. | Documented, with the simulation result. |
+| B5 | Minor | `housing.chain_level` chains across a gap as zero change (latent: no gaps today). | Documented in limitations. |
+| B6 | Minor | A crash could leave a partial store committed. | Covered by A14. |
+| B7 | Minor | The `tsf_annual` WARN band (0.1%) was wide. | Tightened to 0.05% (about RMB 18 bn). |
+
+Effect on the conclusions: none of the six runnable lead/lag pairs shows a robust lead. The FAI
+nowcast has 17 out-of-sample months (2025-04 to 2026-09), a relative RMSE against AR of
+1.000–1.005, and Clark–West p of 0.40–0.56. The correct reading is "no detectable gain, with very
+low power", not "the indicators are useless". The GDP bridge still cannot run until enough
+quarters are parsed (preliminary-accounting GDP pages are fetched from f6d4352 onward).
