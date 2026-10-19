@@ -276,3 +276,12 @@ def test_influence_check_rejects_two_point_lead():
     assert not lags.influence_check(x, y, 3)["significant"]
     y2 = pd.Series(0.8 * x.shift(3).fillna(0).values + rng.normal(0, 0.5, 60), idx)
     assert lags.influence_check(x, y2, 3)["significant"]
+
+
+def test_blocks_to_monthly_february_from_january_month_block():
+    from cetracker.ingest import _blocks_to_monthly
+    recs = [(2025, 1, "", {"scope": "month", "n": 1, "tsf_flow": 70600.0}, "r1", "t", "u1", "2025-02-14"),
+            (2025, 2, "", {"scope": "ytd", "n": 2, "tsf_flow": 92900.0}, "r2", "t", "u2", "2025-03-14")]
+    out = _blocks_to_monthly(recs, ["tsf_flow"])["tsf_flow"]
+    feb = [o for o in out if o[0] == pd.Timestamp("2025-02-28")][0]
+    assert feb[1] == 22300.0 and feb[6] == "from_ytd_diff"

@@ -204,9 +204,11 @@ def _blocks_to_monthly(recs: list[tuple[int, int, str, dict, str, str, str, str]
             elif mth == 1 and (y, 1) in ytd[f]:
                 v, raw, ts, url, pub = ytd[f][(y, 1)]
                 by_field[f].append((_month_end(y, 1), v, raw, ts, url, pub, ""))
-            elif (y, mth) in ytd[f] and (y, mth - 1) in ytd[f]:
+            elif (y, mth) in ytd[f] and ((y, mth - 1) in ytd[f] or (mth == 2 and (y, 1) in month[f])):
+                # January's single-month figure is its own YTD (the January report has no YTD block)
+                prev = ytd[f][(y, mth - 1)][0] if (y, mth - 1) in ytd[f] else month[f][(y, 1)][0]
                 v, raw, ts, url, pub = ytd[f][(y, mth)]
-                by_field[f].append((_month_end(y, mth), v - ytd[f][(y, mth - 1)][0], raw, ts, url, pub, "from_ytd_diff"))
+                by_field[f].append((_month_end(y, mth), v - prev, raw, ts, url, pub, "from_ytd_diff"))
     return by_field
 
 
@@ -357,7 +359,9 @@ def ingest_ndrc(pages: int = 30) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
 
 
-QUARTER_PHRASE = {"一季度": 3, "上半年": 6, "前三季度": 9, "全年": 12}
+QUARTER_PHRASE = {"一季度": 3, "上半年": 6, "前三季度": 9, "全年": 12,
+                  # GDP preliminary-accounting titles: "2025年三季度…", "2024年四季度和全年…"
+                  "二季度": 6, "三季度": 9, "四季度": 12}
 
 
 def title_period(title: str, url_date: str, text: str = "") -> pd.Timestamp | None:
@@ -517,7 +521,10 @@ RELEASE_PARSERS = {
     "property": (r"房地产市场基本情况|全国房地产开发投资", lambda h, p: _at(p, releases.nbs_property(_text(h)))),
     "cpi": (r"居民消费价格", lambda h, p: _at(p, releases.nbs_cpi(_text(h)))),
     "ppi": (r"工业生产者出厂价格", lambda h, p: _at(p, releases.nbs_ppi(_text(h)))),
-    "national": (r"国民经济", _parse_national),
+    # quarterly national releases are titled "…国民经济…" or, in some quarters, "一季度经济运行…" /
+    # "2024年经济运行…"; the dedicated GDP release "YYYY年X季度国内生产总值初步核算结果" carries the
+    # same GDP text a day later and fills quarters whose national release title has no period phrase
+    "national": (r"国民经济|^(?:20\d\d年|一季度|上半年|前三季度)经济运行|国内生产总值初步核算结果", _parse_national),
 }
 
 

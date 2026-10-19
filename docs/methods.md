@@ -130,8 +130,10 @@ not real-time-safe signals. Only the trailing means and the y/y-based series are
 - NBS publishes its own SA m/m for some series; where it is ingested it is shown next to the
   tracker SA. **Industrial production has no tracker SA**: NBS publishes no IP levels, and
   rebuilding levels from y/y would need an unknown base-year seasonal pattern.
-- Only one-sided transforms feed real-time signals (trailing 3-month mean, 3m/3m SAAR on the
-  SA level). No centred filters or HP filter.
+- Real-time signals (lead/lag inputs, nowcast predictors, the Overview's latest readings) use only
+  one-sided transforms: y/y, comparable-basis y/y, trailing 3-month means and 12-month sums.
+  SA-based momentum (m/m SA, 3m/3m SAAR) is two-sided and revises, so it is shown as history and is
+  never used as a predictor. No centred filters or HP filter.
 
 ### 2.4 Real growth (`transform/deflate.py`)
 `real = (1 + nominal)/(1 + deflator) − 1`.

@@ -281,6 +281,15 @@ def stock_flow_consistency(get, tol_rel=0.02):  # noqa: ARG001
                 _exc_list(df, ["computed", "published", "diff"]))
 
 
+def _own_calendar(s: pd.Series) -> pd.Series:
+    from ..analytics.lags import _never_observed_months
+    s = s.copy()
+    s.index = pd.to_datetime(s.index) + pd.offsets.MonthEnd(0)
+    full = pd.date_range(s.index.min(), s.index.max(), freq="ME")
+    skip = _never_observed_months(s)
+    return s.reindex(full[~full.month.isin(list(skip))])
+
+
 def proxy_agreement(get, target="fai.ytd~cyoy", proxies=("proxy.cement_yoy", "proxy.steel_yoy", "proxy.power_yoy"),
                     window=36, min_share=0.6):
     """Direction agreement of 3-month changes (3mma) between the investment signal and physical proxies."""
@@ -292,8 +301,11 @@ def proxy_agreement(get, target="fai.ytd~cyoy", proxies=("proxy.cement_yoy", "pr
         if t.empty or get(p).empty:
             out.append(_missing(cid, "Physical proxies", desc, [s for s in (target, p) if get(s).empty]))
             continue
-        a = t.rolling(3).mean().diff(3)
-        b = get(p).rolling(3).mean().diff(3)
+        # each series on its own observation calendar: months it never has (January for Jan-Feb
+        # releases) are skipped, any other missing month stays a gap, so a 3-month window never
+        # silently spans a hole
+        a = _own_calendar(t).rolling(3).mean().diff(3)
+        b = _own_calendar(get(p)).rolling(3).mean().diff(3)
         d = pd.concat({"t": a, "p": b}, axis=1).dropna().iloc[-window:]
         if len(d) < 12:
             out.append(_missing(cid, "Physical proxies", desc, ["<12 overlapping months"]))

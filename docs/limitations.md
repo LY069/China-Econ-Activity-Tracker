@@ -60,6 +60,9 @@ Stated plainly so they are not mistaken for findings.
   build. Until then, revisions make the evaluation optimistic.
 - **Break tests detect one unknown break** (Quandt–Andrews sup-F) plus Chow tests at known
   dates; multiple-break estimation (Bai–Perron) is not implemented.
+  Chow F statistics assume homoskedastic, serially uncorrelated errors (not HAC). The sup-F
+  p-value uses a fixed-regressor bootstrap with the same assumption, so both overstate
+  significance when errors are autocorrelated. Treat break evidence as indicative.
 - **Sample sizes:** PBoC credit data from 2012–15 onward is long, but NBS targets start in
   November 2021 (about 55–60 months), and lead/lag tests need ≥ 36 jointly observed months. With
   12 candidate lags, power is limited. The placebo and reverse-direction criteria guard against
