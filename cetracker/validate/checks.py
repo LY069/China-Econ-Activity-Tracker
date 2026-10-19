@@ -48,10 +48,15 @@ def tsf_annual(get):
     df["diff"] = df["computed"] - df["published"]
     # tolerance = half the last printed digit: 0.01 tn (RMB 10bn) normally, 0.1 tn when the annual
     # report rounds to one decimal (a value that is a multiple of RMB 100bn is treated as such)
+    # The December figure is a first release; PBoC later revises annual totals slightly (2023: 35.59 trn
+    # first printed, 35.58 trn implied by the 2024 report's '比上年少3.32万亿'). Beyond rounding but within
+    # 0.1% of the total is a revision (WARN); more than that is a parsing or unit error (FAIL).
     df["tol"] = [50.0 if round(v) % 100 == 0 else 10.0 for v in df["published"]]
     df["exception"] = df["diff"].abs() > df["tol"]
+    hard = (df["diff"].abs() > df["tol"] + 0.001 * df["published"].abs()).any()
     n = int(df["exception"].sum())
-    return _rec(cid, group, desc, "PASS" if n == 0 else "FAIL", len(df), n, "half the printed precision (10 or 50 bn)",
+    st = "PASS" if n == 0 else ("FAIL" if hard else "WARN")
+    return _rec(cid, group, desc, st, len(df), n, "rounding (10 or 50 bn); revisions up to 0.1% of the total WARN",
                 f"max |diff| {df['diff'].abs().max():.1f} bn over {len(df)} year(s)", _exc_list(df, ["computed", "published", "diff"]))
 
 

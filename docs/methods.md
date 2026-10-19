@@ -285,7 +285,9 @@ prewhitening an MA-smoothed series is imperfect. Smoothed series are display-onl
     differences are therefore revisions, and are logged as WARN.
   - TSF annual total: the sum of the table's 12 monthly flows must equal the full-year figure in
     the December release, within half its printed precision (RMB 10bn, or 50bn when printed to
-    0.1 trillion). This is a FAIL-level check.
+    0.1 trillion). A gap beyond rounding but within 0.1% of the total is PBoC's later revision of
+    the annual figure, logged as WARN. For example, 2023 was first printed as 35.59 trillion, while the
+    2024 report's "比上年少3.32万亿" implies 35.58 trillion, the table's figure. A larger gap is a FAIL.
   - TSF government bonds − MOF local net vs NPC central quotas.
   - TSF stock y/y.
 - **Published y/y reproduction:**
