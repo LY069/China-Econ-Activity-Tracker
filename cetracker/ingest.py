@@ -446,11 +446,13 @@ def ingest_nbs_release_texts(pages: int = 70) -> pd.DataFrame:
             except Exception as e:
                 item_errors.append(f"{item['url']}: parse {type(e).__name__}: {str(e)[:120]}")
                 continue
-            for sid, (p, v) in vals.items():
-                fl = vflag
-                if sid in JANFEB_SINGLE_MONTH and p.month == 2:
-                    fl = ",".join(x for x in (vflag, "janfeb_combined") if x)
-                rows.append(store.make_rows(sid, pd.Series([v], index=[p]), prov, fl))
+            for sid, pv in vals.items():
+                # a parser returns (period, value), or a list of them for a history table
+                for p, v in (pv if isinstance(pv, list) else [pv]):
+                    fl = vflag
+                    if sid in JANFEB_SINGLE_MONTH and p.month == 2:
+                        fl = ",".join(x for x in (vflag, "janfeb_combined") if x)
+                    rows.append(store.make_rows(sid, pd.Series([v], index=[p]), prov, fl))
             counts[kind] += 1
         # tier figures published in the urban-department interpretation (validation target)
         for item in crawl("NBS", "https://www.stats.gov.cn/sj/sjjd/", r"商品住宅销售价格变动情况", pages=pages):
@@ -504,8 +506,26 @@ def _parse_fai(html: str, per) -> dict:
 
 
 def _parse_national(html: str, per) -> dict:
-    """'国民经济' overview: monthly m/m SA for retail and IP, plus GDP in quarter releases."""
+    """'国民经济' overview: monthly m/m SA for retail and IP, plus GDP in quarter releases. The
+    dedicated GDP release ('国内生产总值初步核算结果') is read from its tables, including the full
+    quarterly y/y and SA q/q history at this release's vintage."""
     t = _text(html)
+    if re.search(r"表\s*2\s*GDP\s*同比增长速度", t):
+        g = releases.nbs_gdp_prelim(t)
+        res = {}
+        c = g["current"]
+        m = {"q_real_yoy": "gdp.real_yoy", "ytd_nominal": "gdp.nominal_ytd", "ytd_real_yoy": "gdp.real_ytd_yoy"}
+        for i, nm in ((1, "primary"), (2, "secondary"), (3, "tertiary")):
+            m[f"s{i}_ytd_nominal"] = f"gdp.{nm}_nominal_ytd"
+            m[f"s{i}_ytd_real_yoy"] = f"gdp.{nm}_real_ytd_yoy"
+        for k, sid in m.items():
+            if k in c:
+                res[sid] = [(per, c[k])]
+        for key, sid in (("real_yoy", "gdp.real_yoy"), ("sa_qoq", "gdp.sa_qoq")):
+            hist = [(_month_end(y, 3 * q), v) for (y, q), v in sorted(g[key].items()) if _month_end(y, 3 * q) <= per]
+            if hist:
+                res[sid] = sorted({p: v for p, v in res.get(sid, []) + hist}.items())
+        return res
     out = {k: v for k, v in {**releases.nbs_retail(t), **releases.nbs_ip(t)}.items() if k.endswith("mom_sa_nbs")}
     res = _at(per, out)
     g = releases.nbs_gdp(t)

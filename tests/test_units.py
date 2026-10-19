@@ -313,3 +313,21 @@ def test_mof_new_bond_wordings():
     b = R.mof_local_bonds("2021年2月,全国发行地方政府债券557亿元。其中,发行一般债券295亿元,发行专项债券262亿元;"
                           "按用途划分,全部为再融资债券。")["blocks"][0]
     assert b["new_total"] == 0.0 and b["refi_total"] == 557.0 and b["refi_general"] == 295.0
+
+
+def test_gdp_prelim_tables():
+    t = ("经初步核算，我国 2023 年一季度 GDP 核算结果如下。 表 1 2023 年一季度 GDP 初步核算数据 绝对额（亿元） "
+         "比上年同期增长（ % ） GDP 284997 4.5 第一产业 11575 3.7 第二产业 107947 3.3 第三产业 165475 5.4 注： 1. … "
+         "表 2 GDP 同比增长速度 单位： % 年份 1 季度 2 季度 3 季度 4 季度 2022 4.8 0.4 3.9 2.9 2023 4.5 注：同比… "
+         "表 3 GDP 环比增长速度 单位： % 年份 1 季度 2 季度 3 季度 4 季度 2022 0.8 -2.3 3.9 0.6 2023 2.2 注：环比…")
+    g = R.nbs_gdp_prelim(t)
+    assert g["current"]["ytd_nominal"] == 28499.7 and g["current"]["q_real_yoy"] == 4.5
+    assert g["current"]["s3_ytd_real_yoy"] == 5.4
+    assert g["real_yoy"][(2022, 4)] == 2.9 and g["real_yoy"][(2023, 1)] == 4.5
+    assert g["sa_qoq"][(2022, 2)] == -2.3 and (2023, 2) not in g["sa_qoq"]
+    t2 = ("表 1 2022 年二季度和上半年 GDP 初步核算数据 绝对额（亿元） 比上年同期增长（ % ） 二季度 上半年 二季度 上半年 "
+          "GDP 292464 562642 0.4 2.5 第一产业 18183 29137 4.4 5.0 注：")
+    c = R.nbs_gdp_prelim(t2)["current"]
+    assert (c["q_nominal"], c["ytd_nominal"], c["q_real_yoy"], c["ytd_real_yoy"]) == (29246.4, 56264.2, 0.4, 2.5)
+    q1 = R.nbs_gdp("初步核算,一季度国内生产总值296299亿元,按不变价格计算,同比增长5.3%,比上年四季度环比增长1.6%。")
+    assert q1["q_real_yoy"] == 5.3 and q1["q_sa_qoq"] == 1.6 and q1["q_index"] == 1

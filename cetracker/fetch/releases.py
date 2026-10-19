@@ -413,9 +413,16 @@ def nbs_gdp(text: str) -> dict:
       q_real_yoy (latest quarter), q_sa_qoq (latest quarter)."""
     t = _clean(text)
     out = {}
-    m = _first(r"初步核算,(?:20\d\d年)?(?:一季度|上半年|前三季度|全年)?国内生产总值" + NUM + r"亿元,按不变价格计算,(?:比上年|同比)(增长|下降)" + NUM + "%", t)
+    m = _first(r"初步核算,(?:20\d\d年)?(一季度|上半年|前三季度|全年)?国内生产总值" + NUM + r"亿元,按不变价格计算,(?:比上年|同比)(增长|下降)" + NUM + "%", t)
     if m:
-        out["ytd_nominal"], out["ytd_real_yoy"] = float(m.group(1)) / 10, _sgn(m.group(2), m.group(3))
+        out["ytd_nominal"], out["ytd_real_yoy"] = float(m.group(2)) / 10, _sgn(m.group(3), m.group(4))
+        if m.group(1) == "一季度":                    # Q1: the quarter is the year to date
+            out["q_index"], out["q_real_yoy"] = 1, out["ytd_real_yoy"]
+    # Q1 releases: '…同比增长5.3%,比上年四季度环比增长1.6%' (or '比2021年四季度环比增长1.3%')
+    m = _first(r"比(?:上年|20\d\d年)四季度环比(增长|下降)" + NUM + "%", t)
+    if m:
+        out["q_sa_qoq"] = _sgn(m.group(1), m.group(2))
+        out.setdefault("q_index", 1)
     for i, name in enumerate(["第一产业", "第二产业", "第三产业"], 1):
         m = _first(name + r"增加值" + NUM + r"亿元,(?:比上年|同比)?(增长|下降)" + NUM + "%", t)
         if m:
@@ -431,6 +438,44 @@ def nbs_gdp(text: str) -> dict:
     if m:
         out["q_sa_qoq"] = _sgn(m.group(2), m.group(3))
         out.setdefault("q_index", QUARTER_WORD[m.group(1)])
+    return out
+
+
+def nbs_gdp_prelim(text: str) -> dict:
+    """NBS '…国内生产总值初步核算结果' (tables flattened to text).
+
+    Table 1: GDP and sector value added, current price (亿元) and real growth (%), for the quarter and
+    the year to date ('二季度 上半年 二季度 上半年': 4 numbers) or, in Q1, one column each (2 numbers).
+    Table 2: real y/y by quarter for every year shown; Table 3: SA q/q by quarter (this release's
+    vintage of the whole history, so revisions are captured). Returns
+    {'current': {...}, 'real_yoy': {(year, q): v}, 'sa_qoq': {(year, q): v}}."""
+    t = re.sub(r"\s+", " ", text)
+    out = {"current": {}, "real_yoy": {}, "sa_qoq": {}}
+    num = r"(-?\d+(?:\.\d+)?)"
+    t1 = re.search(r"表 ?1(.*?)注[:：]", t)
+    if t1:
+        body = t1.group(1).split("比上年同期增长", 1)[-1]
+        for label, key in (("GDP", "gdp"), ("第一产业", "s1"), ("第二产业", "s2"), ("第三产业", "s3")):
+            m = re.search(r"(?<![A-Za-z])" + label + r" " + num + r" " + num + r"(?: " + num + r" " + num + r")?(?= |$)", body)
+            if not m:
+                continue
+            if m.group(3) is not None:            # quarter, YTD, quarter growth, YTD growth
+                qn, yn, qg, yg = (float(m.group(i)) for i in range(1, 5))
+            else:                                  # Q1: quarter = YTD
+                qn = yn = float(m.group(1))
+                qg = yg = float(m.group(2))
+            if key == "gdp":
+                out["current"].update(q_nominal=qn / 10, ytd_nominal=yn / 10, q_real_yoy=qg, ytd_real_yoy=yg)
+            else:
+                out["current"].update({f"{key}_ytd_nominal": yn / 10, f"{key}_ytd_real_yoy": yg})
+    for key, cap in (("real_yoy", r"表 ?2 GDP ?同比增长速度"), ("sa_qoq", r"表 ?3 GDP ?环比增长速度")):
+        seg = re.search(cap + r"(.*?)注[:：]", t)
+        if not seg:
+            continue
+        rows = seg.group(1).split("4 季度", 1)[-1]
+        for y, vals in re.findall(r"(20\d\d)((?: -?\d+\.\d+){1,4})", rows):
+            for q, v in enumerate(vals.split(), 1):
+                out[key][(int(y), q)] = float(v)
     return out
 
 

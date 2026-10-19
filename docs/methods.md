@@ -54,6 +54,7 @@ response creates no new file.
 | Data | Route | History |
 |---|---|---|
 | NBS activity, prices, property, GDP, 70-city | Monthly release pages `www.stats.gov.cn/sj/zxfb/` (text + embedded tables), parsed by release type | Nov 2021 onward (oldest page in the release archive) |
+| NBS GDP (quarterly) | "YYYY年X季度国内生产总值初步核算结果" releases: table 1 (quarter and YTD, nominal and real, by sector), tables 2–3 (real y/y and SA q/q history by quarter, at that release's vintage) | Real y/y and SA q/q from 2017-Q1; nominal from 2021 |
 | NBS 70-city tier figures (validation target) | Urban-department interpretation releases `www.stats.gov.cn/sj/sjjd/` | Same |
 | TSF flow/stock, money supply, loans by sector & tenor | PBoC statistics tables `pbc.gov.cn/diaochatongjisi/116219/116319/` (HTML version of each table) | 2012 onward |
 | PBoC release text (loans, TSF, M1/M2 y/y) | PBoC news list (`11040-N.html` pagination) | Reconciliation source; M1/M2 published y/y |

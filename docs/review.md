@@ -96,8 +96,15 @@ or in the vintage store.
 | B6 | Minor | A crash could leave a partial store committed. | Covered by A14. |
 | B7 | Minor | The `tsf_annual` WARN band (0.1%) was wide. | Tightened to 0.05% (about RMB 18 bn). |
 
-Effect on the conclusions: none of the six runnable lead/lag pairs shows a robust lead. The FAI
+Effect on the conclusions: none of the seven runnable lead/lag pairs shows a robust lead. The FAI
 nowcast has 17 out-of-sample months (2025-04 to 2026-09), a relative RMSE against AR of
 1.000–1.005, and Clark–West p of 0.40–0.56. The correct reading is "no detectable gain, with very
-low power", not "the indicators are useless". The GDP bridge still cannot run until enough
-quarters are parsed (preliminary-accounting GDP pages are fetched from f6d4352 onward).
+low power", not "the indicators are useless".
+
+GDP coverage, flagged by the reviewer as untestable offline, is resolved. The live refresh fetched
+NBS's preliminary-accounting GDP releases. Their tables carry the full quarterly real y/y and SA
+q/q history at each release's vintage, so real GDP y/y and SA q/q now run continuously from
+2017-Q1 to 2026-Q3 (39 quarters, previously 11–14), and nominal YTD has no gaps since 2021. The
+GDP bridge now runs for the credit-impulse model: over 19 out-of-sample quarters it does not beat
+AR (relative RMSE 1.17, Clark–West p = 0.84). The models with monthly NBS indicators still have only
+about 15 common quarters, because the NBS monthly releases start in late 2021.
