@@ -47,3 +47,4 @@ commits new vintages and publishes `site/` to GitHub Pages from `main`.
 - `docs/methods.md`: every transformation, test and assumption
 - `docs/validation_report.md`: generated on each build
 - `docs/limitations.md`: what the tracker cannot do yet, and why
+- `docs/review.md`: the independent reviews, their findings and how each was resolved
