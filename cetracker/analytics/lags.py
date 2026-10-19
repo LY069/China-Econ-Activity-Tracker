@@ -25,8 +25,10 @@ Pipeline for a pair (x = candidate leading indicator, y = official target):
 7. Placebo: (a) circular block bootstrap of x (block 12) -> distribution of max |CCF| over
    leads; (b) the best lead must beat the best reverse-direction correlation.
 
-A "x leads y by k months" verdict requires all four: prewhitened CCF outside the 95% band at
-k, placebo p < 0.05, Granger p < 0.05, not dominated by the reverse direction.
+A "x leads y by k months" verdict requires all of: prewhitened CCF outside the 95% band at k,
+the same after dropping the two most influential pairs (influence_check), placebo p < 0.05,
+Granger p < 0.05, not dominated by the reverse direction; and (in build.run_analytics) the same
+verdict on the sample without the COVID window.
 """
 from __future__ import annotations
 
@@ -273,9 +275,26 @@ class LeadLagResult:
     breaks: dict
     verdict: str
     criteria: dict = field(default_factory=dict)
+    influence: dict = field(default_factory=dict)
 
     def to_dict(self):
         return asdict(self)
+
+
+def influence_check(xw: pd.Series, yw: pd.Series, lag: int, drop: int = 2) -> dict:
+    """Correlation at `lag` after removing the `drop` pairs that contribute most to it (largest
+    |z_x * z_y|). A lead carried by one or two coincident shocks (e.g. a lockdown month lined up
+    with a Lunar-New-Year swing in M1) does not survive; the sign must hold and the correlation
+    must stay outside the 95% band for the remaining sample."""
+    m = pd.concat([xw.shift(lag).rename("x"), yw.rename("y")], axis=1).dropna()
+    if len(m) < 12:
+        return {"significant": False, "corr": None, "dropped": []}
+    z = (m - m.mean()) / m.std()
+    c = (z["x"] * z["y"]).abs().sort_values(ascending=False)
+    keep = m.loc[c.index[drop:]]
+    r0, r = m.corr().iloc[0, 1], keep.corr().iloc[0, 1]
+    ok = bool(np.sign(r) == np.sign(r0) and abs(r) > 1.96 / np.sqrt(len(keep)))
+    return {"significant": ok, "corr": float(r), "dropped": [str(t.date()) for t in c.index[:drop]]}
 
 
 def lead_lag(x: pd.Series, y: pd.Series, xname: str, yname: str, max_lag: int = 12,
@@ -318,8 +337,10 @@ def lead_lag(x: pd.Series, y: pd.Series, xname: str, yname: str, max_lag: int = 
                 F = chow(Y, X, k)
                 chows[bd] = {"F": float(F), "p": float(1 - st.f.cdf(F, X.shape[1], len(m) - 2 * X.shape[1]))}
         brk["chow"] = chows
+    infl = influence_check(xw, yw, best) if best is not None else None
     crit = {
         "ccf_significant": bool(best is not None and abs(best_corr) > band_k),
+        "survives_dropping_2_most_influential": bool(infl is not None and infl["significant"]),
         "placebo_p_lt_0.05": bool(plac is not None and plac < 0.05),
         "granger_p_lt_0.05": bool(gr is not None and gr < 0.05),
         "not_reverse_dominated": bool(rev is not None and best is not None and abs(best_corr) > rev),
@@ -333,5 +354,5 @@ def lead_lag(x: pd.Series, y: pd.Series, xname: str, yname: str, max_lag: int = 
         band95=float(band), best_lead=best, best_lead_corr=best_corr, best_reverse_corr=rev,
         placebo_p=plac, granger_p=gr, adl=ad,
         rolling={str(k.date()): float(v) for k, v in roll.items()},
-        breaks=brk, verdict=verdict, criteria=crit,
+        breaks=brk, verdict=verdict, criteria=crit, influence=infl or {},
     )

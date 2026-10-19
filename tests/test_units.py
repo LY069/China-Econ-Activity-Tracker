@@ -261,3 +261,18 @@ def test_money_table_partial_year():
             "<tr><td>货币（M1）</td><td>1179680.52</td><td>1159258.82</td></tr></table>")
     r = PT.money_supply(html)
     assert r["M2"].dropna().size == 2 and r["M1"].dropna().iloc[-1] == 1159258.82
+
+
+def test_influence_check_rejects_two_point_lead():
+    """Two coincident shocks three months apart must not count as a lead."""
+    from cetracker.analytics import lags
+    rng = np.random.default_rng(11)
+    idx = pd.date_range("2021-01-31", periods=60, freq="ME")
+    x = pd.Series(rng.normal(size=60), idx)
+    y = pd.Series(rng.normal(size=60), idx)
+    x.iloc[10], y.iloc[13] = 8.0, 8.0
+    x.iloc[30], y.iloc[33] = -8.0, -8.0
+    assert pd.concat([x.shift(3), y], axis=1).dropna().corr().iloc[0, 1] > 0.5
+    assert not lags.influence_check(x, y, 3)["significant"]
+    y2 = pd.Series(0.8 * x.shift(3).fillna(0).values + rng.normal(0, 0.5, 60), idx)
+    assert lags.influence_check(x, y2, 3)["significant"]

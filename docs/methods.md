@@ -147,8 +147,9 @@ lead/lag analysis runs Chow tests at every register date inside its sample. Entr
 - M2 definition changes, 2011 and 2018.
 - M1 redefinition, January 2025 (affects the M1–M2 gap).
 - FAI data-quality correction, 2018.
-- COVID base effects, 2020–22. Growth vs 2019 (annualised) is shown for 2021–23, and analytics
-  run with and without 2020–21.
+- COVID, 2020–22, through the end of zero-COVID in December 2022, including the April–May 2022
+  Shanghai lockdown. Lead/lag verdicts must hold on the sample without 2020–22. The nowcast
+  excludes 2020–21 from estimation; excluding 2022 as well would leave too short a training sample.
 - Annual above-size sample redraw.
 - 2023 economic-census GDP revision.
 - Local-government debt-swap programmes: 2015–18, 2023 special refinancing, 2024–26.
@@ -236,9 +237,22 @@ For each pair (high-frequency x, official y):
      over leads.
    - (b) The reverse direction (y leading x) must not dominate.
 
-**Publication rule:** "x leads y by k" is shown only if all four criteria hold. These are the
-prewhitened CCF significance, placebo p < 0.05, Granger p < 0.05, and no reverse dominance.
+**Publication rule:** "x leads y by k" is shown only if all six criteria hold:
+1. Prewhitened CCF significant at k.
+2. The CCF at k is still significant, with the same sign, after dropping the two pairs that
+   contribute most to it.
+3. Placebo p < 0.05.
+4. Granger p < 0.05.
+5. No reverse dominance.
+6. The same verdict on the sample without 2020–22.
+
 Otherwise the app says "no robust lead" and still shows the evidence.
+
+Criteria 2 and 6 were added after the first real-data run. "M1–M2 gap leads IP by 3 months" passed
+the original four (r = 0.61, placebo p = 0.002, Granger p < 0.001). However, two pairs carried it:
+April–May 2022 IP (the Shanghai lockdown) lined up with the January–February 2022 swing in the
+gap, which is a Lunar New Year effect in unadjusted M1. Without those two pairs r = 0.33. The ADL
+coefficients net to zero (long-run multiplier −0.01, p = 0.95), and the result fails outside COVID.
 
 **Inference uses unsmoothed series.** In testing, running these tests on a 3-month moving
 average shifted the estimated lead (a planted 3-month lead was estimated at 6 months), because

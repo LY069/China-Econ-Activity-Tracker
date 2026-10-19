@@ -458,7 +458,8 @@ function renderLeadLag(){
   add("Transforms", `x: ${r.transform_x}, y: ${r.transform_y}; prewhitening AR(${r.ar_order_prewhiten})`);
   const qa = r.breaks?.quandt_andrews; if (qa?.sup_f) add("Unknown break (Quandt–Andrews)", `sup-F ${fmt(qa.sup_f,2)} at ${qa.break_date}, bootstrap p=${fmt(qa.p_boot,3)}`);
   Object.entries(r.breaks?.chow||{}).forEach(([d,v])=>add(`Chow at ${d}`, `F=${fmt(v.F,2)}, p=${fmt(v.p,3)}`));
-  if (r.ex_covid) add("Ex-COVID (2020–21 dropped)", r.ex_covid.verdict || r.ex_covid.error);
+  if (r.ex_covid) add("Ex-COVID (2020–22 dropped)", r.ex_covid.verdict || r.ex_covid.error);
+  if (r.influence && r.influence.corr != null) add("Without the 2 most influential months (" + (r.influence.dropped || []).join(", ") + ")", "r = " + r.influence.corr.toFixed(2) + (r.influence.significant ? " (still significant)" : " (not significant)"));
   c2.append(kv); g.append(c2);
   // rolling
   const rolling = Object.entries(r.rolling||{});

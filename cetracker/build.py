@@ -55,7 +55,10 @@ PAIRS = [
 PUB_LAG = {"lgb.new_total~impulse_stk": 1, "tsf.govt_bonds~impulse_stk": 1,
            "tsf.flow_ex_govt~impulse_stk": 1, "tsf.flow~impulse_stk": 1, "ndrc.approvals_value": 1,
            "money.m1_m2_gap": 1}
-COVID = ("2020-01-31", "2021-12-31")
+COVID = ("2020-01-31", "2021-12-31")            # nowcast: rows excluded from estimation
+# lead/lag robustness: China's disruption ran to the end of zero-COVID (Dec 2022), including the
+# Apr-May 2022 Shanghai lockdown; a robust lead must survive dropping all of it
+COVID_LEADLAG = ("2020-01-31", "2022-12-31")
 # NBS release history starts Nov 2021 (~58 monthly obs by late 2026): low power is reported, not hidden.
 MIN_OBS = 40
 NOWCAST_MIN_TRAIN = 36
@@ -102,12 +105,17 @@ def run_analytics(get) -> dict:
             full = lags.lead_lag(xs, ys, x, y, break_dates=bdates).to_dict()
             ex = None
             try:
-                mask = lambda s: s[(s.index < COVID[0]) | (s.index > COVID[1])]
+                mask = lambda s: s[(s.index < COVID_LEADLAG[0]) | (s.index > COVID_LEADLAG[1])]
                 # ex-COVID robustness: drop the window then re-run on the remaining span
                 ex = lags.lead_lag(mask(xs), mask(ys), x, y, n_boot=199).to_dict()
                 ex = {k: ex[k] for k in ("verdict", "best_lead", "best_lead_corr", "placebo_p", "granger_p", "criteria", "n")}
             except Exception as e:
                 ex = {"error": str(e)[:200]}
+            # a robust lead must also hold without the COVID window
+            full["criteria"]["survives_ex_covid"] = bool(ex and "robust" in str(ex.get("verdict", ""))
+                                                         and "no robust" not in str(ex.get("verdict", "")))
+            if not all(full["criteria"].values()):
+                full["verdict"] = f"no robust lead of {x} over {y}"
             out["lead_lag"].append({**rec, "status": "ok", **full, "ex_covid": ex})
         except lags.InsufficientData as e:
             out["lead_lag"].append({**rec, "status": f"insufficient data: {e}"})
