@@ -39,9 +39,42 @@ from statsmodels.tsa.stattools import adfuller, kpss, grangercausalitytests
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
+from ..transform.ytd import fill_janfeb
+
+
 def _align(x: pd.Series, y: pd.Series) -> pd.DataFrame:
-    d = pd.concat({"x": x, "y": y}, axis=1).dropna()
-    return d
+    """Common observations, restricted to the longest run of consecutive months.
+
+    Shifts below are positional, so a gap (e.g. a month NDRC did not report) would silently
+    pair the wrong months; restricting to a contiguous span avoids that.
+    """
+    d = pd.concat({"x": fill_janfeb(x), "y": fill_janfeb(y)}, axis=1, sort=True).dropna()
+    if len(d) < 2:
+        return d
+    idx = pd.DatetimeIndex(d.index)
+    step = np.diff(idx.year * 12 + idx.month)
+    breaks = np.where(step != 1)[0]
+    bounds = np.concatenate([[-1], breaks, [len(d) - 1]])
+    lens = np.diff(bounds)
+    k = int(lens.argmax())
+    return d.iloc[bounds[k] + 1: bounds[k + 1] + 1]
+
+
+def _ccf_np(xv: np.ndarray, yv: np.ndarray, max_lag: int) -> np.ndarray:
+    """corr(x_{t-k}, y_t), k = -max_lag..max_lag, on aligned contiguous arrays."""
+    n = len(xv)
+    out = np.full(2 * max_lag + 1, np.nan)
+    for i, k in enumerate(range(-max_lag, max_lag + 1)):
+        if k >= 0:
+            a, b = xv[: n - k], yv[k:]
+        else:
+            a, b = xv[-k:], yv[: n + k]
+        if len(a) > 10:
+            a = a - a.mean()
+            b = b - b.mean()
+            den = np.sqrt((a * a).sum() * (b * b).sum())
+            out[i] = (a * b).sum() / den if den > 0 else np.nan
+    return out
 
 
 def stationarity(s: pd.Series) -> dict:
@@ -83,12 +116,7 @@ def prewhiten(x: pd.Series, y: pd.Series, maxlag: int = 12) -> tuple[pd.Series, 
 def ccf(x: pd.Series, y: pd.Series, max_lag: int = 12) -> pd.Series:
     """corr(x_{t-k}, y_t) for k in [-max_lag, max_lag]; k > 0 means x leads y."""
     d = _align(x, y)
-    out = {}
-    for k in range(-max_lag, max_lag + 1):
-        a = d["x"].shift(k)
-        m = pd.concat([a, d["y"]], axis=1).dropna()
-        out[k] = m.iloc[:, 0].corr(m.iloc[:, 1]) if len(m) > 10 else np.nan
-    return pd.Series(out)
+    return pd.Series(_ccf_np(d["x"].values, d["y"].values, max_lag), index=range(-max_lag, max_lag + 1))
 
 
 def adl(x: pd.Series, y: pd.Series, max_p: int = 6, max_q: int = 12, min_lag: int = 0) -> dict:
@@ -184,16 +212,15 @@ def block_placebo(x: pd.Series, y: pd.Series, max_lag: int, observed_max: float,
                   n_boot: int = 499, block: int = 12, seed: int = 0) -> float:
     """p-value: share of circular-block-shuffled x giving max_{k>0}|CCF| >= observed."""
     d = _align(x, y)
-    xv, n = d["x"].values, len(d)
+    xv, yv, n = d["x"].values, d["y"].values, len(d)
     rng = np.random.default_rng(seed)
     nb = int(np.ceil(n / block))
     cnt = 0
     for _ in range(n_boot):
         starts = rng.integers(0, n, nb)
         idx = np.concatenate([(np.arange(s, s + block) % n) for s in starts])[:n]
-        xs = pd.Series(xv[idx], d.index)
-        c = ccf(xs, d["y"], max_lag)
-        cnt += np.nanmax(np.abs(c[c.index > 0].values)) >= observed_max
+        c = _ccf_np(xv[idx], yv, max_lag)
+        cnt += np.nanmax(np.abs(c[max_lag + 1:])) >= observed_max
     return (cnt + 1) / (n_boot + 1)
 
 
@@ -255,6 +282,8 @@ def lead_lag(x: pd.Series, y: pd.Series, xname: str, yname: str, max_lag: int = 
         brk["quandt_andrews"] = sf
         chows = {}
         for bd in break_dates or []:
+            if not (m.index[0] < pd.Timestamp(bd) < m.index[-1]):
+                continue
             k = int((m.index <= pd.Timestamp(bd)).sum())
             if X.shape[1] + 2 < k < len(m) - X.shape[1] - 2:
                 from scipy import stats as st

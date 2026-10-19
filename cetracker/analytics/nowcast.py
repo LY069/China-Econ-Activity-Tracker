@@ -27,11 +27,14 @@ import pandas as pd
 import statsmodels.api as sm
 from scipy import stats
 
+from ..transform.ytd import fill_janfeb
+
 
 def _me(s: pd.Series) -> pd.Series:
+    """Month-end index; Jan filled from Jan-Feb for NBS combined-release series (fill_janfeb)."""
     s = s.copy()
     s.index = pd.to_datetime(s.index) + pd.offsets.MonthEnd(0)
-    return s.sort_index()
+    return fill_janfeb(s.sort_index())   # no-op for quarterly series and where January exists
 
 
 def design(target: pd.Series, predictors: dict[str, tuple[pd.Series, int]], use: list[str], ar: int = 1) -> pd.DataFrame:

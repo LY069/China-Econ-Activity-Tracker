@@ -1,0 +1,208 @@
+"""Derived series: everything computed from fetched rows, with lineage on every row.
+
+Derived ids use "<base>~<transform>" so the app can group them with their source series:
+    ~sm            single month from YTD (Feb = Jan-Feb combined, flagged)
+    ~sm_split      single month with Jan/Feb split evenly (analytics use)
+    ~cyoy          official-consistent (comparable-basis) single-month y/y
+    ~nyoy          naive y/y from levels (for the gap log only)
+    ~sa / ~sa_mom / ~saar3   own seasonal adjustment (X-13, STL cross-check in ~sa_stl)
+    ~real          deflated y/y
+    ~3mma          trailing 3-month mean (one-sided, real-time safe)
+    ~12m           trailing 12-month sum
+    ~impulse       Δ12 of the 12m sum, % of trailing 4Q nominal GDP
+"""
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+from . import store
+from .transform import ytd as Y, seasonal as SA, credit as C, deflate as D, housing as H
+
+NOTES: dict[str, str] = {}
+
+
+class Deriver:
+    def __init__(self, obs: pd.DataFrame):
+        self.obs = store.latest(obs)
+        self.rows: list[pd.DataFrame] = []
+        self.cache: dict[str, pd.Series] = {}
+        self._vint: dict[str, str] = {}
+
+    def get(self, sid: str) -> pd.Series:
+        if sid in self.cache:
+            return self.cache[sid]
+        return store.series(self.obs, sid)
+
+    def has(self, *sids) -> bool:
+        return all(len(self.get(s).dropna()) > 0 for s in sids)
+
+    def put(self, sid: str, s: pd.Series, transform: str, inputs: list[str], flags=""):
+        s = s.replace([np.inf, -np.inf], np.nan).dropna()
+        if s.empty:
+            return
+        self.cache[sid] = s
+        vint = max((self.obs[self.obs.series_id == i]["vintage_date"].max() for i in inputs
+                    if (self.obs.series_id == i).any()), default="") or ""
+        if not vint:
+            vint = max((self._vint.get(i, "") for i in inputs), default="")
+        self._vint[sid] = vint
+        prov = store.Provenance("tracker", "derived", vintage_date=vint,
+                                lineage=f"{transform}({','.join(inputs)})")
+        self.rows.append(store.make_rows(sid, s, prov, flags))
+
+    # ------------------------------------------------------------------ activity
+    def ytd_family(self, base: str):
+        if base.endswith("_ytd"):
+            ytd_id, yoy_id = base, f"{base}_yoy"
+        else:
+            ytd_id, yoy_id = f"{base}.ytd", f"{base}.ytd_yoy"
+        if not self.has(ytd_id):
+            return
+        ytd = self.get(ytd_id)
+        sm, fl = Y.single_month_from_ytd(ytd)
+        self.put(f"{ytd_id}~sm", sm, "single_month_from_ytd", [ytd_id], fl)
+        sp, fl2 = Y.split_janfeb(sm, fl)
+        self.put(f"{ytd_id}~sm_split", sp, "split_janfeb_even", [f"{ytd_id}~sm"], fl2)
+        if self.has(yoy_id):
+            cy = Y.comparable_single_month_yoy(ytd, self.get(yoy_id))
+            self.put(f"{ytd_id}~cyoy", cy, "comparable_single_month_yoy", [ytd_id, yoy_id])
+            self.put(f"{ytd_id}~cyoy~3mma", cy.rolling(3, min_periods=3).mean(), "trailing_mean_3", [f"{ytd_id}~cyoy"])
+        self.put(f"{ytd_id}~sm~nyoy", Y.naive_yoy(sm), "naive_yoy_from_levels", [f"{ytd_id}~sm"])
+        self.seasonal(f"{ytd_id}~sm_split", janfeb=True)
+
+    def seasonal(self, sid: str, janfeb: bool = False):
+        s = self.get(sid).dropna()
+        if len(s) < 48:
+            return
+        full = pd.date_range(s.index.min(), s.index.max(), freq="ME")
+        if len(full) != len(s):
+            # use longest contiguous recent span
+            gaps = np.where(np.diff(s.index.values).astype("timedelta64[D]").astype(int) > 31)[0]
+            s = s.iloc[gaps[-1] + 1:] if len(gaps) else s
+            if len(s) < 48:
+                return
+        try:
+            prim, cross, note = SA.seasonal_adjust(s, janfeb_combined=janfeb)
+        except Exception as e:
+            NOTES[sid] = f"SA failed: {e}"
+            return
+        NOTES[f"{sid}~sa"] = note
+        self.put(f"{sid}~sa", prim["sa"], "x13" if note.startswith("X-13") else "stl_holiday", [sid])
+        self.put(f"{sid}~sa_mom", SA.sa_mom(prim["sa"]), "pct_change_1", [f"{sid}~sa"])
+        self.put(f"{sid}~saar3", SA.saar_3m(prim["sa"]), "saar_3m3m", [f"{sid}~sa"])
+        if cross is not None:
+            self.put(f"{sid}~sa_stl", cross["sa"], "stl_holiday_crosscheck", [sid])
+
+    def activity(self):
+        for base in ("retail", "fai", "fai.re_ytd", "re.starts_ytd", "re.completions_ytd", "re.sales_ytd"):
+            self.ytd_family(base)
+        if self.has("retail.level"):
+            self.seasonal("retail.level", janfeb=False)
+        # real growth
+        if self.has("retail.yoy", "prices.cpi_goods_yoy"):
+            self.put("retail.yoy~real", D.real_yoy(self.get("retail.yoy"), self.get("prices.cpi_goods_yoy")),
+                     "real_yoy[deflator:cpi_goods]", ["retail.yoy", "prices.cpi_goods_yoy"])
+        if self.has("fai.ytd~cyoy", "prices.ppi_yoy"):
+            self.put("fai.ytd~cyoy~real", D.real_yoy(self.get("fai.ytd~cyoy"), self.get("prices.ppi_yoy")),
+                     "real_yoy[deflator_proxy:ppi]", ["fai.ytd~cyoy", "prices.ppi_yoy"])
+        if self.has("fai.ytd_yoy", "prices.ppi_yoy"):
+            self.put("fai.ytd_yoy~real", D.real_yoy(self.get("fai.ytd_yoy"), D.ytd_average_deflator(self.get("prices.ppi_yoy"))),
+                     "real_yoy[deflator_proxy:ppi_ytd_avg]", ["fai.ytd_yoy", "prices.ppi_yoy"])
+        for sid in ("ip.yoy", "retail.yoy", "proxy.cement_yoy", "proxy.steel_yoy", "proxy.power_yoy"):
+            if self.has(sid):
+                self.put(f"{sid}~3mma", self.get(sid).rolling(3, min_periods=3).mean(), "trailing_mean_3", [sid])
+        # 2019-based CAGR for the COVID-distorted window
+        for sid in ("ip.yoy", "retail.yoy", "fai.ytd~cyoy"):
+            if self.has(sid):
+                self.put(f"{sid}~cagr2019", Y.cagr_vs_2019(None, self.get(sid)), "cagr_vs_2019", [sid])
+
+    # ------------------------------------------------------------------ GDP
+    def gdp(self):
+        parts = ["primary", "secondary", "tertiary"]
+        if self.has("gdp.nominal_q", *[f"gdp.{p}_nominal_q" for p in parts], *[f"gdp.{p}_real_yoy" for p in parts]):
+            g = self.get("gdp.nominal_q")
+            for p in parts:
+                share_lag = (self.get(f"gdp.{p}_nominal_q") / g).shift(4)
+                c = share_lag * self.get(f"gdp.{p}_real_yoy")
+                self.put(f"gdp.contrib_{p}", c, "contribution[share_t-4*real_yoy]",
+                         ["gdp.nominal_q", f"gdp.{p}_nominal_q", f"gdp.{p}_real_yoy"])
+
+    # ------------------------------------------------------------------ credit
+    def credit(self):
+        if self.has("money.m1_yoy", "money.m2_yoy"):
+            self.put("money.m1_m2_gap", C.gap(self.get("money.m1_yoy"), self.get("money.m2_yoy")), "difference",
+                     ["money.m1_yoy", "money.m2_yoy"], "")
+        if self.has("tsf.flow", "tsf.govt_bonds"):
+            ex = C.ex_component(self.get("tsf.flow").rename("tsf"), self.get("tsf.govt_bonds").rename("govt"))
+            self.put("tsf.flow_ex_govt", ex, "difference", ["tsf.flow", "tsf.govt_bonds"])
+        gdp_ok = self.has("gdp.nominal_q")
+        for sid in ("tsf.flow", "tsf.flow_ex_govt", "tsf.rmb_loans", "loans.total", "tsf.govt_bonds"):
+            if not self.has(sid):
+                continue
+            f12 = C.rolling12(self.get(sid))
+            self.put(f"{sid}~12m", f12, "rolling_sum_12", [sid])
+            if gdp_ok:
+                self.put(f"{sid}~impulse", C.credit_impulse(self.get(sid), self.get("gdp.nominal_q")),
+                         "credit_impulse[d12(sum12)/gdp4q]", [sid, "gdp.nominal_q"])
+        if self.has("tsf.stock"):
+            self.put("tsf.stock~yoy_calc", C.stock_yoy(self.get("tsf.stock")), "stock_yoy", ["tsf.stock"])
+
+    # ------------------------------------------------------------------ bonds
+    def bonds(self):
+        if self.has("lgb.refi_total", "lgb.refi_debt_swap"):
+            r = self.get("lgb.refi_total")
+            sw = self.get("lgb.refi_debt_swap").reindex(r.index).fillna(0.0)
+            self.put("lgb.refi_regular", r - sw, "difference[refi_total-debt_swap(missing=0)]",
+                     ["lgb.refi_total", "lgb.refi_debt_swap"])
+        if self.has("lgb.general_new", "lgb.special_new"):
+            nm = self.get("lgb.general_new").add(self.get("lgb.special_new"), fill_value=np.nan)
+            self.put("lgb.new_total", nm, "sum", ["lgb.general_new", "lgb.special_new"])
+        if self.has("lgb.total", "lgb.redemption"):
+            self.put("lgb.net", self.get("lgb.total") - self.get("lgb.redemption"), "difference",
+                     ["lgb.total", "lgb.redemption"])
+        gdp_ok = self.has("gdp.nominal_q")
+        for sid in ("lgb.special_new", "lgb.new_total", "lgb.net"):
+            if self.has(sid):
+                self.put(f"{sid}~12m", C.rolling12(self.get(sid)), "rolling_sum_12", [sid])
+                if gdp_ok:
+                    self.put(f"{sid}~impulse", C.credit_impulse(self.get(sid), self.get("gdp.nominal_q")),
+                             "fiscal_impulse[d12(sum12)/gdp4q]", [sid, "gdp.nominal_q"])
+        if self.has("tsf.govt_bonds", "lgb.net"):
+            self.put("cgb.net_implied", self.get("tsf.govt_bonds") - self.get("lgb.net"),
+                     "difference[tsf_govt_bonds - lgb_net]", ["tsf.govt_bonds", "lgb.net"])
+
+    # ------------------------------------------------------------------ projects
+    def projects(self):
+        for sid in ("ndrc.approvals_value", "ndrc.approvals_count"):
+            if self.has(sid):
+                s = self.get(sid)
+                full = s.reindex(pd.date_range(s.index.min(), s.index.max(), freq="ME"))
+                self.put(f"{sid}~3mma", full.rolling(3, min_periods=2).mean(), "trailing_mean_3(min2)", [sid])
+                self.put(f"{sid}~12m", full.rolling(12, min_periods=10).sum() * 12 / full.rolling(12, min_periods=10).count(),
+                         "rolling_sum_12(gap-scaled,min10)", [sid])
+
+    # ------------------------------------------------------------------ housing
+    def housing(self):
+        for seg in ("new", "used"):
+            for h in ("mom", "yoy"):
+                ids = [s for s in self.obs["series_id"].unique() if s.startswith(f"city70.{seg}.{h}.")]
+                if not ids:
+                    continue
+                df = pd.DataFrame({i.split(".", 3)[3]: self.get(i) for i in ids})
+                agg = H.tier_aggregate(df)
+                for tier in agg.columns:
+                    self.put(f"hp.{seg}.{tier}.{h}", agg[tier], "tier_mean[index-100]", ids[:3] + ["..."])
+                if h == "mom":
+                    lvl = H.chain_level(agg)
+                    for tier in lvl.columns:
+                        self.put(f"hp.{seg}.{tier}.level", lvl[tier], "chain_index[2015=100]", [f"hp.{seg}.{tier}.mom"])
+                    self.put(f"hp.{seg}.breadth_down", H.breadth(df), "count[index<100]", ids[:3] + ["..."])
+
+    def run(self) -> pd.DataFrame:
+        for step in (self.gdp, self.activity, self.credit, self.bonds, self.projects, self.housing):
+            try:
+                step()
+            except Exception as e:
+                NOTES[f"step:{step.__name__}"] = f"{type(e).__name__}: {e}"
+        return pd.concat(self.rows, ignore_index=True) if self.rows else pd.DataFrame(columns=store.COLUMNS)

@@ -141,3 +141,16 @@ def cagr_vs_2019(level_or_index: pd.Series, yoy: pd.Series | None = None) -> pd.
         if ok:
             out[t] = (acc ** (1 / (t.year - 2019)) - 1) * 100
     return pd.Series(out, dtype=float)
+
+
+def fill_janfeb(s: pd.Series) -> pd.Series:
+    """For series NBS publishes Jan-Feb combined (Jan missing, Feb = Jan-Feb figure), set
+    January equal to the Jan-Feb value so monthly analytics see a contiguous series.
+    Applied to growth rates only (for levels use split_janfeb). No-op where Jan exists."""
+    s = _month_end(s.dropna())
+    add = {}
+    for t in s.index[s.index.month == 2]:
+        jan = t - pd.offsets.MonthEnd(1)
+        if jan not in s.index:
+            add[jan] = s[t]
+    return pd.concat([s, pd.Series(add, dtype=float)]).sort_index() if add else s

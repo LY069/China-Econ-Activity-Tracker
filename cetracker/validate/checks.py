@@ -1,0 +1,230 @@
+"""External validation: identities, cross-source reconciliation, published-y/y reproduction,
+physical-proxy agreement. Each check returns a uniform record:
+
+    {id, group, description, status: PASS|FAIL|WARN|NOT_TESTABLE, n, n_exceptions,
+     tolerance, detail, exceptions: [...]}
+
+NOT_TESTABLE is used when inputs are missing; it is never counted as a pass.
+"""
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+from ..transform import ytd as Y, credit as C, fiscal as F
+
+
+def _rec(cid, group, desc, status, n=0, nexc=0, tol="", detail="", exceptions=None):
+    return {"id": cid, "group": group, "description": desc, "status": status, "n": int(n),
+            "n_exceptions": int(nexc), "tolerance": tol, "detail": detail,
+            "exceptions": (exceptions or [])[:50]}
+
+
+def _missing(cid, group, desc, need):
+    return _rec(cid, group, desc, "NOT_TESTABLE", detail=f"missing inputs: {', '.join(need)}")
+
+
+def _exc_list(df: pd.DataFrame, cols: list[str]) -> list[dict]:
+    d = df[df["exception"]]
+    return [{"period": str(i.date()), **{c: (None if pd.isna(d.loc[i, c]) else round(float(d.loc[i, c]), 3)) for c in cols}}
+            for i in d.index]
+
+
+def identity(get, cid, desc, total, parts, tol_abs, tol_rel=0.0, group="Accounting identity", warn_only=False):
+    need = [total, *parts]
+    if any(get(s).empty for s in need):
+        return _missing(cid, group, desc, [s for s in need if get(s).empty])
+    df = C.sum_identity(get(total), {p: get(p) for p in parts}, tol_abs, tol_rel)
+    if df.empty:
+        return _missing(cid, group, desc, ["no overlapping periods"])
+    nexc = int(df["exception"].sum())
+    status = "PASS" if nexc == 0 else ("WARN" if warn_only else "FAIL")
+    return _rec(cid, group, desc, status, len(df), nexc, f"abs {tol_abs} bn / rel {tol_rel:.0%}",
+                f"max |diff| {df['diff'].abs().max():.2f} bn", _exc_list(df, ["total", "sum_parts", "diff"]))
+
+
+def ytd_roundtrip(get, ytd_id):
+    desc = f"Single months (Jan/Feb split) sum back to published YTD: {ytd_id}"
+    cid = f"ytd_roundtrip:{ytd_id}"
+    ytd = get(ytd_id)
+    if ytd.empty:
+        return _missing(cid, "YTD consistency", desc, [ytd_id])
+    sm, fl = Y.single_month_from_ytd(ytd)
+    sp, _ = Y.split_janfeb(sm, fl)
+    recon = sp.groupby(sp.index.year).cumsum()
+    idx = ytd.index.intersection(recon.index)
+    diff = (recon[idx] - ytd[idx]).abs()
+    df = pd.DataFrame({"published": ytd[idx], "rebuilt": recon[idx], "diff": diff})
+    df["exception"] = df["diff"] > 1e-6 * df["published"].abs().clip(lower=1)
+    # months after a missing month cannot round-trip: report them, don't hide them
+    nexc = int(df["exception"].sum())
+    return _rec(cid, "YTD consistency", desc, "PASS" if nexc == 0 else "FAIL", len(df), nexc, "exact (1e-6 rel)",
+                f"{int(fl.eq('gap_previous_month_missing').sum())} month(s) follow a missing month",
+                _exc_list(df, ["published", "rebuilt", "diff"]))
+
+
+def yoy_reproduction(get, ytd_id, ytd_yoy_id, pub_yoy_id, tol_pp=0.15):
+    cid = f"yoy_repro:{pub_yoy_id}"
+    desc = f"Published single-month y/y reproduced from YTD levels + YTD y/y (comparable basis): {pub_yoy_id}"
+    need = [ytd_id, ytd_yoy_id, pub_yoy_id]
+    if any(get(s).empty for s in need):
+        return _missing(cid, "Published y/y reproduction", desc, [s for s in need if get(s).empty])
+    cy = Y.comparable_single_month_yoy(get(ytd_id), get(ytd_yoy_id))
+    pub = get(pub_yoy_id)
+    idx = cy.index.intersection(pub.index)
+    idx = idx[idx.month > 2]
+    df = pd.DataFrame({"computed": cy[idx], "published": pub[idx]})
+    df["diff"] = df["computed"] - df["published"]
+    df["exception"] = df["diff"].abs() > tol_pp
+    nexc = int(df["exception"].sum())
+    status = "PASS" if nexc == 0 else ("WARN" if nexc / max(len(df), 1) < 0.1 else "FAIL")
+    return _rec(cid, "Published y/y reproduction", desc, status, len(df), nexc, f"{tol_pp} pp",
+                f"mean |diff| {df['diff'].abs().mean():.3f} pp", _exc_list(df, ["computed", "published", "diff"]))
+
+
+def naive_gap(get, level_id, pub_yoy_id, tol_pp=0.5):
+    """Logged, not pass/fail: how far naive y/y from levels is from published y/y."""
+    cid = f"yoy_gap_log:{level_id}"
+    desc = f"Gap between y/y computed from published levels and published y/y: {level_id}"
+    if get(level_id).empty or get(pub_yoy_id).empty:
+        return _missing(cid, "Published y/y reproduction", desc, [level_id, pub_yoy_id])
+    df = Y.yoy_gap_log(get(level_id), get(pub_yoy_id), tol_pp)
+    df = df[df.index.month > 2]
+    return _rec(cid, "Published y/y reproduction", desc, "WARN" if df["exception"].any() else "PASS",
+                len(df), int(df["exception"].sum()), f"{tol_pp} pp (logged; NBS comparable-basis adjustments expected)",
+                f"mean gap {df['gap_pp'].mean():.2f} pp, max |gap| {df['gap_pp'].abs().max():.2f} pp",
+                _exc_list(df.rename(columns={"gap_pp": "diff"}), ["computed_yoy", "published_yoy", "diff"]))
+
+
+def tier_reproduction(get, tol_pp=0.1):
+    out = []
+    for seg in ("new", "used"):
+        for tier in ("tier1", "tier2", "tier3"):
+            for h in ("mom", "yoy"):
+                built, text = f"hp.{seg}.{tier}.{h}", f"nbs_text.hp.{seg}.{tier}.{h}"
+                cid = f"tier_repro:{built}"
+                desc = f"Tracker tier aggregate vs NBS release text: {built}"
+                if get(built).empty or get(text).empty:
+                    out.append(_missing(cid, "Published y/y reproduction", desc, [s for s in (built, text) if get(s).empty]))
+                    continue
+                a, b = get(built), get(text)
+                idx = a.index.intersection(b.index)
+                df = pd.DataFrame({"computed": a[idx].round(2), "published": b[idx]})
+                df["diff"] = df["computed"] - df["published"]
+                df["exception"] = df["diff"].abs() > tol_pp
+                nexc = int(df["exception"].sum())
+                out.append(_rec(cid, "Published y/y reproduction", desc, "PASS" if nexc == 0 else "FAIL", len(df), nexc,
+                                f"{tol_pp} pp", f"mean |diff| {df['diff'].abs().mean():.3f}",
+                                _exc_list(df, ["computed", "published", "diff"])))
+    return out
+
+
+def cgb_reconciliation(get, tol_rel=0.15):
+    """Implied CGB net financing (TSF govt bonds - MOF local net) vs NPC central quotas, annual."""
+    cid = "recon:tsf_govt_vs_mof_lgb"
+    desc = ("PBoC TSF government-bond line minus MOF local-bond net issuance = implied central net financing; "
+            "annual total vs NPC central deficit + special CGB quotas")
+    need = ["tsf.govt_bonds", "lgb.total", "lgb.redemption"]
+    if any(get(s).empty for s in need):
+        return _missing(cid, "Cross-source reconciliation", desc, [s for s in need if get(s).empty])
+    imp = get("tsf.govt_bonds") - (get("lgb.total") - get("lgb.redemption"))
+    imp = imp.dropna()
+    ann = imp.groupby(imp.index.year).agg(["sum", "count"])
+    rows = []
+    for yr, r in ann.iterrows():
+        if r["count"] < 12:
+            continue
+        q = F.quotas().get(int(yr), {})
+        target = sum(v for k, v in q.items() if k in ("cgb_deficit", "ultra_long_special_cgb", "bank_recap_special_cgb")
+                     and v is not None) + sum((q.get("extra") or {}).values())
+        if not target or q.get("cgb_deficit") is None:
+            continue
+        rows.append({"period": str(yr), "implied_cgb_net": round(r["sum"], 1), "npc_central_quota": target,
+                     "rel_diff": round(r["sum"] / target - 1, 3)})
+    if not rows:
+        return _rec(cid, "Cross-source reconciliation", desc, "NOT_TESTABLE", detail="no complete year with quota")
+    exc = [r for r in rows if abs(r["rel_diff"]) > tol_rel]
+    return _rec(cid, "Cross-source reconciliation", desc, "PASS" if not exc else "WARN", len(rows), len(exc),
+                f"{tol_rel:.0%} (quota != net financing exactly: CGB net also funds rollovers of savings bonds etc.)",
+                "; ".join(f"{r['period']}: {r['implied_cgb_net']} vs {r['npc_central_quota']}" for r in rows), exc)
+
+
+def stock_flow_consistency(get, tol_rel=0.02):
+    cid = "recon:tsf_stock_yoy"
+    desc = "TSF stock y/y computed from published stocks vs published stock y/y (PBoC comparable basis)"
+    if get("tsf.stock").empty or get("tsf.stock_yoy").empty:
+        return _missing(cid, "Cross-source reconciliation", desc, ["tsf.stock", "tsf.stock_yoy"])
+    calc = C.stock_yoy(get("tsf.stock"))
+    pub = get("tsf.stock_yoy")
+    idx = calc.index.intersection(pub.index)
+    df = pd.DataFrame({"computed": calc[idx], "published": pub[idx]})
+    df["diff"] = df["computed"] - df["published"]
+    df["exception"] = df["diff"].abs() > 0.3
+    return _rec(cid, "Cross-source reconciliation", desc, "PASS" if not df["exception"].any() else "WARN",
+                len(df), int(df["exception"].sum()), "0.3 pp", f"mean |diff| {df['diff'].abs().mean():.2f} pp",
+                _exc_list(df, ["computed", "published", "diff"]))
+
+
+def proxy_agreement(get, target="fai.ytd~cyoy", proxies=("proxy.cement_yoy", "proxy.steel_yoy", "proxy.power_yoy"),
+                    window=36, min_share=0.6):
+    """Direction agreement of 3-month changes (3mma) between the investment signal and physical proxies."""
+    out = []
+    t = get(target)
+    for p in proxies:
+        cid = f"proxy:{p}"
+        desc = f"Direction of 3m change agrees: {target} vs {p} (last {window} months)"
+        if t.empty or get(p).empty:
+            out.append(_missing(cid, "Physical proxies", desc, [s for s in (target, p) if get(s).empty]))
+            continue
+        a = t.rolling(3).mean().diff(3)
+        b = get(p).rolling(3).mean().diff(3)
+        d = pd.concat({"t": a, "p": b}, axis=1).dropna().iloc[-window:]
+        if len(d) < 12:
+            out.append(_missing(cid, "Physical proxies", desc, ["<12 overlapping months"]))
+            continue
+        agree = (np.sign(d["t"]) == np.sign(d["p"]))
+        share = float(agree.mean())
+        recent = d.iloc[-6:]
+        div = recent[np.sign(recent["t"]) != np.sign(recent["p"])]
+        out.append(_rec(cid, "Physical proxies", desc, "PASS" if share >= min_share else "WARN", len(d), int((~agree).sum()),
+                        f"agreement >= {min_share:.0%}",
+                        f"agreement {share:.0%}; corr of 3m changes {d['t'].corr(d['p']):.2f}; "
+                        f"{len(div)} divergent month(s) in last 6 -> explain in commentary",
+                        [{"period": str(i.date()), "target_3m_chg": round(r['t'], 2), "proxy_3m_chg": round(r['p'], 2)}
+                         for i, r in div.iterrows()]))
+    return out
+
+
+def run(get) -> list[dict]:
+    R = []
+    R.append(identity(get, "id:hh_loans", "Household loans = short-term + medium/long-term", "loans.hh_total",
+                      ["loans.hh_short", "loans.hh_medlong"], tol_abs=10))
+    R.append(identity(get, "id:corp_loans", "Corporate loans = short + medium/long + bills (residual: leasing/other)",
+                      "loans.corp_total", ["loans.corp_short", "loans.corp_medlong", "loans.corp_bills"],
+                      tol_abs=10, tol_rel=0.08, warn_only=True))
+    R.append(identity(get, "id:loans_sector", "Total RMB loans = household + corporate + NBFI (residual: govt agencies)",
+                      "loans.total", ["loans.hh_total", "loans.corp_total", "loans.nbfi"], tol_abs=20, tol_rel=0.05,
+                      warn_only=True))
+    R.append(identity(get, "id:tsf_components",
+                      "TSF flow = listed components (incomplete without ABS & write-offs: reported as WARN)",
+                      "tsf.flow", ["tsf.rmb_loans", "tsf.fx_loans", "tsf.entrusted", "tsf.trust", "tsf.undiscounted_ba",
+                                   "tsf.corp_bonds", "tsf.govt_bonds", "tsf.equity"], tol_abs=50, tol_rel=0.05, warn_only=True))
+    R.append(identity(get, "id:lgb_total", "Local bonds: new + refinancing = total issuance", "lgb.total",
+                      ["lgb.new_total", "lgb.refi_total"], tol_abs=1.0))
+    R.append(identity(get, "id:lgb_new", "Local bonds: new general + new special = new total", "lgb.new_total",
+                      ["lgb.general_new", "lgb.special_new"], tol_abs=1.0))
+    R.append(identity(get, "id:lgb_refi", "Local bonds: refinancing general + special = refinancing total",
+                      "lgb.refi_total", ["lgb.refi_general", "lgb.refi_special"], tol_abs=1.0))
+    for y in ("retail.ytd", "fai.ytd", "fai.re_ytd", "re.starts_ytd", "re.completions_ytd", "re.sales_ytd"):
+        R.append(ytd_roundtrip(get, y))
+    R.append(yoy_reproduction(get, "retail.ytd", "retail.ytd_yoy", "retail.yoy"))
+    R.append(naive_gap(get, "retail.level", "retail.yoy"))
+    R.append(naive_gap(get, "fai.ytd", "fai.ytd_yoy"))
+    R.extend(tier_reproduction(get))
+    R.append(cgb_reconciliation(get))
+    R.append(stock_flow_consistency(get))
+    R.append(_rec("recon:lgb_mof_vs_celma", "Cross-source reconciliation",
+                  "MOF monthly local-bond totals vs bond-by-bond CELMA/ChinaBond sum", "NOT_TESTABLE",
+                  detail="bond-level source not ingested (see source status)"))
+    R.extend(proxy_agreement(get))
+    return R

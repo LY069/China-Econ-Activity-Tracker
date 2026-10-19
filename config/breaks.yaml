@@ -53,7 +53,7 @@
 - id: NBS_ABOVE_SIZE_SAMPLE
   date: annual
   series: [ip.*, retail.*, fai.*]
-  what: Above-designated-size sample (IP: revenue >= RMB20m since 2011) re-drawn each January.
+  what: "Above-designated-size sample (IP: revenue >= RMB20m since 2011) re-drawn each January."
   treatment: Never compute y/y from published levels across years; reconstruct implied comparable base.
   status: n/a
 - id: GDP_CENSUS_2023

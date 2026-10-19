@@ -1,7 +1,10 @@
 """HTTP with raw-response archiving. Every fetched byte is saved before parsing.
 
-Raw files go to data/raw/<source>/<YYYY-MM-DD>/<sha1-of-request>.<ext> together with a
-.meta.json (url, params, status, retrieved_at). Store rows reference the raw file, so any
+Raw files are content-addressed: data/raw/<source>/<request-hash>/<content-hash>.<ext>,
+with a .meta.json beside each (url, params, status, first retrieved_at). An unchanged
+response re-uses the existing file untouched, so scheduled refreshes do not change the
+repository unless the source actually changed. Cache-busting params (k1, t, _) are left
+out of the request hash. Store rows reference the raw file, so any
 dashboard number can be traced to the exact response it was parsed from.
 """
 from __future__ import annotations
@@ -19,6 +22,9 @@ ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/124.0 Safari/537.36")
+
+
+NOCACHE_PARAMS = {"k1", "t", "_"}
 
 
 class FetchError(RuntimeError):
@@ -45,24 +51,29 @@ def fetch(source: str, url: str, params: dict | None = None, data: dict | None =
           method: str = "GET", ext: str = "bin", headers: dict | None = None,
           retries: int = 4, timeout: int = 40, encoding: str | None = None) -> tuple[bytes, str, str]:
     """Fetch and archive. Returns (content, raw_file relative path, retrieved_at)."""
-    key = json.dumps([url, params, data, method], sort_keys=True, ensure_ascii=False)
+    stable = {k: v for k, v in (params or {}).items() if k not in NOCACHE_PARAMS}
+    key = json.dumps([url, stable, data, method], sort_keys=True, ensure_ascii=False)
     h = hashlib.sha1(key.encode()).hexdigest()[:16]
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    d = RAW / source / day
-    d.mkdir(parents=True, exist_ok=True)
-    path = d / f"{h}.{ext}"
+    d = RAW / source / h
     last = None
     for i in range(retries):
         try:
             r = SESSION.request(method, url, params=params, data=data, headers=headers, timeout=timeout)
             if r.status_code == 200 and r.content:
                 ts = now_utc()
-                path.write_bytes(r.content)
-                (d / f"{h}.meta.json").write_text(json.dumps(
-                    {"url": r.url, "request_url": url, "params": params, "data": data, "method": method,
-                     "status": r.status_code, "retrieved_at": ts, "bytes": len(r.content),
-                     "content_type": r.headers.get("Content-Type", "")}, ensure_ascii=False, indent=1))
-                return r.content, str(path.relative_to(ROOT)), ts
+                ch = hashlib.sha1(r.content).hexdigest()[:16]
+                d.mkdir(parents=True, exist_ok=True)
+                path = d / f"{ch}.{ext}"
+                meta_p = d / f"{ch}.meta.json"
+                if path.exists() and meta_p.exists():
+                    meta = json.loads(meta_p.read_text())
+                else:
+                    path.write_bytes(r.content)
+                    meta = {"url": r.url, "request_url": url, "params": params, "data": data, "method": method,
+                            "status": r.status_code, "first_retrieved_at": ts,
+                            "bytes": len(r.content), "content_type": r.headers.get("Content-Type", "")}
+                    meta_p.write_text(json.dumps(meta, ensure_ascii=False, indent=1))
+                return r.content, str(path.relative_to(ROOT)), meta["first_retrieved_at"]
             last = f"HTTP {r.status_code}"
         except requests.RequestException as e:
             last = repr(e)[:300]

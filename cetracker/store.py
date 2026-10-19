@@ -98,9 +98,20 @@ def load(path: Path = OBS_FILE) -> pd.DataFrame:
 
 
 def append(new: pd.DataFrame, path: Path = OBS_FILE) -> pd.DataFrame:
-    """Append rows; an identical (series_id, period, vintage_date) key is replaced, never duplicated."""
+    """Append rows as new vintages only where they add information.
+
+    A row is kept if its (series_id, period) is new, or its value differs from the latest
+    stored vintage (a revision). Re-fetching unchanged history therefore adds nothing,
+    and the store's vintages are genuine first-publication / revision dates. An identical
+    (series_id, period, vintage_date) key is replaced, never duplicated.
+    """
     validate(new)
     old = load(path)
+    if len(old):
+        prev = latest(old)[["series_id", "period", "value"]].rename(columns={"value": "_prev"})
+        m = new.merge(prev, on=["series_id", "period"], how="left")
+        changed = m["_prev"].isna() | ((m["value"] - m["_prev"]).abs() > 1e-9 * m["_prev"].abs().clip(lower=1))
+        new = new[changed.values]
     allrows = pd.concat([old, new], ignore_index=True) if len(old) else new.copy()
     allrows = allrows.drop_duplicates(subset=KEY, keep="last").sort_values(KEY).reset_index(drop=True)
     path.parent.mkdir(parents=True, exist_ok=True)
