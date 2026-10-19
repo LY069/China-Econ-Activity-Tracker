@@ -18,9 +18,13 @@ Stated plainly so they are not mistaken for findings.
 - **Central government bonds by type** (regular / ultra-long special / bank-recap special) need
   MOF issuance announcements or ChinaBond records; that fetcher is not yet built. Implied central
   net financing is derived instead, as PBoC TSF government bonds minus MOF local net issuance.
-- **NDRC approvals are not a regular series.** NDRC states monthly approval counts and amounts
-  in press conferences irregularly. Months without a statement are gaps, not zeros. NDRC
-  approvals cover only projects needing central approval, a small and lumpy slice of investment.
+- **NDRC approvals effectively end in April 2021.** Parsing every press-conference transcript NDRC
+  still hosts (2019 onward; older list pages return 404) yields only 7 monthly approval statements
+  (2019-05 to 2021-04). NDRC stopped reporting monthly approval totals after that. The series is
+  kept for the record, but the NDRC-to-FAI lead/lag test and nowcast cannot run on current data,
+  and the app says so instead of fitting a model to 7 points. Possible replacements are
+  provincial key-project lists, special-bond project disclosures and the online approval platform;
+  none is ingested yet.
 - **Provincial key-project lists and the national online approval platform are not ingested.**
   The project-type ("six networks") classifier is built and unit-tested, but it has no
   project-level input until those sources (or special-bond prospectus project lists) are

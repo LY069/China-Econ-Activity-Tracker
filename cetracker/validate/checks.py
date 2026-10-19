@@ -60,6 +60,9 @@ def pair_check(get, cid, group, desc, a_id, b_id, tol_abs, warn_only=False):
 
 
 def ytd_roundtrip(get, ytd_id):
+    """Single months (Jan/Feb split) must cumulate back to published YTD. Only months whose
+    whole within-year chain is present are testable; months after a data gap are counted and
+    reported (a missing release is a coverage problem, not an identity failure)."""
     desc = f"Single months (Jan/Feb split) sum back to published YTD: {ytd_id}"
     cid = f"ytd_roundtrip:{ytd_id}"
     ytd = get(ytd_id)
@@ -67,15 +70,22 @@ def ytd_roundtrip(get, ytd_id):
         return _missing(cid, "YTD consistency", desc, [ytd_id])
     sm, fl = Y.single_month_from_ytd(ytd)
     sp, _ = Y.split_janfeb(sm, fl)
+    testable = []
+    for t in ytd.index:
+        months = pd.date_range(pd.Timestamp(t.year, 1, 31), t, freq="ME")
+        if all(m in sp.index and pd.notna(sp[m]) for m in months):
+            testable.append(t)
+    gaps = len(ytd) - len(testable)
+    if not testable:
+        return _missing(cid, "YTD consistency", desc, ["no month with a complete YTD chain"])
     recon = sp.groupby(sp.index.year).cumsum()
-    idx = ytd.index.intersection(recon.index)
-    diff = (recon[idx] - ytd[idx]).abs()
-    df = pd.DataFrame({"published": ytd[idx], "rebuilt": recon[idx], "diff": diff})
+    idx = pd.DatetimeIndex(testable)
+    df = pd.DataFrame({"published": ytd[idx], "rebuilt": recon[idx]})
+    df["diff"] = (df["rebuilt"] - df["published"]).abs()
     df["exception"] = df["diff"] > 1e-6 * df["published"].abs().clip(lower=1)
-    # months after a missing month cannot round-trip: report them, don't hide them
     nexc = int(df["exception"].sum())
     return _rec(cid, "YTD consistency", desc, "PASS" if nexc == 0 else "FAIL", len(df), nexc, "exact (1e-6 rel)",
-                f"{int(fl.eq('gap_previous_month_missing').sum())} month(s) follow a missing month",
+                f"{gaps} month(s) not testable (missing earlier release in the same year)",
                 _exc_list(df, ["published", "rebuilt", "diff"]))
 
 

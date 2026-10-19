@@ -216,7 +216,7 @@ def _rows_from_fields(by_field, mapping: dict[str, str], source: str, tier: str,
     return rows
 
 
-def ingest_pboc(pages: int = 40) -> pd.DataFrame:
+def ingest_pboc(pages: int = 120) -> pd.DataFrame:
     rows = []
     try:
         lst = crawl("PBoC", "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
@@ -233,11 +233,11 @@ def ingest_pboc(pages: int = 40) -> pd.DataFrame:
                 item_errors.append(str(e)[:160])
                 continue
             pub = pub or item["date"]
-            if "社会融资规模" in item["title"]:
-                p = releases.pboc_tsf(text)
-                for b in p.get("blocks", []):
-                    tsf_recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub))
-            else:
+            # since 2023 the TSF section is part of the monthly 金融统计数据报告: parse both on every report
+            p = releases.pboc_tsf(text)
+            for b in p.get("blocks", []):
+                tsf_recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub))
+            if "金融统计数据报告" in item["title"]:
                 p = releases.pboc_financial_statistics(text)
                 for b in p.get("blocks", []):
                     loan_recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub))

@@ -53,6 +53,9 @@ PUB_LAG = {"lgb.special_new~impulse": 0, "lgb.new_total~impulse": 0, "tsf.govt_b
            "tsf.flow_ex_govt~impulse": 1, "tsf.flow~impulse": 1, "ndrc.approvals_value": 1,
            "money.m1_m2_gap": 1}
 COVID = ("2020-01-31", "2021-12-31")
+# NBS release history starts Nov 2021 (~58 monthly obs by late 2026): low power is reported, not hidden.
+MIN_OBS = 40
+NOWCAST_MIN_TRAIN = 36
 
 
 def _clean(o):
@@ -87,7 +90,7 @@ def run_analytics(get) -> dict:
     for x, y, label in PAIRS:
         xs, ys = get(x), get(y)
         rec = {"x": x, "y": y, "label": label}
-        if xs.dropna().shape[0] < 48 or ys.dropna().shape[0] < 48:
+        if xs.dropna().shape[0] < MIN_OBS or ys.dropna().shape[0] < MIN_OBS:
             rec["status"] = "insufficient data"
             rec["n_x"], rec["n_y"] = int(xs.dropna().shape[0]), int(ys.dropna().shape[0])
             out["lead_lag"].append(rec)
@@ -116,9 +119,9 @@ def run_analytics(get) -> dict:
                       ("AR + bonds + credit", ["lgb.new_total~impulse", "tsf.flow_ex_govt~impulse"])]:
         if all(u in preds for u in use):
             models[name] = use
-    if len(target.dropna()) > 60 and models:
+    if len(target.dropna()) >= NOWCAST_MIN_TRAIN + 12 and models:
         try:
-            out["nowcast"]["fai"] = nowcast.evaluate(target, preds, models, min_train=48, exclude=COVID)
+            out["nowcast"]["fai"] = nowcast.evaluate(target, preds, models, min_train=NOWCAST_MIN_TRAIN, exclude=COVID)
             out["nowcast"]["fai"]["target"] = "fai.ytd~cyoy"
             live = {}
             for name, use in models.items():
@@ -133,7 +136,7 @@ def run_analytics(get) -> dict:
                                  "available_predictors": list(preds)}
     # GDP bridge (quarterly): quarter-average of monthly indicators available by month 2 of the quarter
     g = get("gdp.real_yoy")
-    if len(g.dropna()) > 30:
+    if len(g.dropna()) >= 24:
         try:
             qp = {}
             for sid in ("ip.yoy", "retail.yoy~real", "fai.ytd~cyoy~real", "tsf.flow~impulse"):
@@ -144,7 +147,7 @@ def run_analytics(get) -> dict:
             qmodels = {f"AR + {k}": [k] for k in qp}
             if len(qp) > 1:
                 qmodels["AR + all monthly (1st month of quarter)"] = list(qp)
-            out["nowcast"]["gdp"] = nowcast.evaluate(gq, qp, qmodels, min_train=24, exclude=("2020-03-31", "2021-12-31"))
+            out["nowcast"]["gdp"] = nowcast.evaluate(gq, qp, qmodels, min_train=12, exclude=("2020-03-31", "2021-12-31"))
             out["nowcast"]["gdp"]["target"] = "gdp.real_yoy"
         except Exception as e:
             out["nowcast"]["gdp"] = {"error": f"{type(e).__name__}: {str(e)[:300]}"}

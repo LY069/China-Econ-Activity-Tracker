@@ -83,7 +83,7 @@ def evaluate(target: pd.Series, predictors: dict[str, tuple[pd.Series, int]], mo
         ok = D.dropna().index
         common = ok if common is None else common.intersection(ok)
     common = common.sort_values()
-    if len(common) <= min_train + 8:
+    if len(common) < min_train + 8:
         return {"error": f"too few common observations ({len(common)})", "models": list(models)}
     origins = common[min_train:]
     fc = {m: {} for m in models}
