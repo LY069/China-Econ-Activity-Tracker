@@ -1,0 +1,89 @@
+# "Six networks" (六网) keyword dictionary used to classify project names/descriptions.
+# Classification is first-match by priority order; unmatched records stay "unclassified".
+# Precision/recall measured on the hand-labelled audit sample (data/audit/classification_sample.csv).
+categories:
+  water:        # 水网
+    - 水利
+    - 水库
+    - 灌区
+    - 引水
+    - 调水
+    - 供水
+    - 防洪
+    - 河道
+    - 堤防
+    - 水网
+    - 治水
+    - 污水
+    - 水环境
+    - 水资源
+  power_energy: # 电网/新型能源网
+    - 电网
+    - 特高压
+    - 输电
+    - 变电
+    - 电站
+    - 抽水蓄能
+    - 光伏
+    - 风电
+    - 储能
+    - 核电
+    - 油气管道
+    - 天然气管
+    - 能源
+  transport:    # 交通网 (railways, highways, airports, ports, waterways)
+    - 铁路
+    - 高铁
+    - 城际
+    - 轨道交通
+    - 地铁
+    - 公路
+    - 高速
+    - 国道
+    - 机场
+    - 港口
+    - 航道
+    - 码头
+    - 枢纽
+    - 桥
+    - 隧道
+  computing:    # 算力网/新型基础设施
+    - 算力
+    - 数据中心
+    - 5G
+    - 信息基础设施
+    - 智算
+    - 大数据
+    - 人工智能
+  urban_pipes:  # 地下管网 / 城市更新
+    - 管网
+    - 地下管廊
+    - 综合管廊
+    - 燃气管
+    - 雨污分流
+    - 排水
+    - 老旧小区
+    - 城市更新
+    - 城中村
+  logistics:    # 物流网 / 冷链
+    - 物流
+    - 冷链
+    - 仓储
+    - 集散
+other_categories:
+  social:
+    - 学校
+    - 医院
+    - 卫生
+    - 养老
+    - 托育
+    - 保障性住房
+    - 安居
+  industrial_park:
+    - 产业园
+    - 园区
+    - 标准厂房
+  land_reserve:
+    - 土地储备
+    - 收储
+priority: [water, power_energy, transport, computing, urban_pipes, logistics, social, industrial_park, land_reserve]
