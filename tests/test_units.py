@@ -310,3 +310,6 @@ def test_mof_new_bond_wordings():
     b = R.mof_local_bonds("2020年1月,全国发行地方政府债券7850.64亿元。其中,发行一般债券702.43亿元,"
                           "发行专项债券7148.21亿元;按用途划分,全部为新增债券。")["blocks"][0]
     assert b["new_total"] == 7850.64 and b["refi_total"] == 0.0 and b["new_special"] == 7148.21
+    b = R.mof_local_bonds("2021年2月,全国发行地方政府债券557亿元。其中,发行一般债券295亿元,发行专项债券262亿元;"
+                          "按用途划分,全部为再融资债券。")["blocks"][0]
+    assert b["new_total"] == 0.0 and b["refi_total"] == 557.0 and b["refi_general"] == 295.0

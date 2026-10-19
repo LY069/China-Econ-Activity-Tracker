@@ -168,12 +168,16 @@ def mof_local_bonds(text: str) -> dict:
                 blk[f"{k}_total"] = float(mm.group(1))
                 if mm.group(2) is not None:
                     blk[f"{k}_general"], blk[f"{k}_special"] = float(mm.group(2)), float(mm.group(3))
-        # months with no refinancing: '发行一般债券702.43亿元,发行专项债券7148.21亿元;按用途划分,全部为新增债券'
-        if "new_total" not in blk and re.search(r"按用途划分,全部为新增债券", chunk):
+        # months with only one use: '发行一般债券702.43亿元,发行专项债券7148.21亿元;按用途划分,全部为新增债券'
+        # (or '…全部为再融资债券', as in Jan-Feb 2021): the other use is zero
+        allof = re.search(r"按用途划分,全部为(新增|再融资)债券", chunk)
+        if allof and "new_total" not in blk and "refi_total" not in blk:
             mm = re.search(r"发行一般债券" + NUM + r"亿元,(?:发行)?专项债券" + NUM + r"亿元", chunk)
             if mm:
                 g, sp = float(mm.group(1)), float(mm.group(2))
-                blk.update(new_total=round(g + sp, 2), new_general=g, new_special=sp, refi_total=0.0)
+                use, other = ("new", "refi") if allof.group(1) == "新增" else ("refi", "new")
+                blk.update({f"{use}_total": round(g + sp, 2), f"{use}_general": g, f"{use}_special": sp,
+                            f"{other}_total": 0.0, f"{other}_general": 0.0, f"{other}_special": 0.0})
         for k, p in {"total": r"发行地方政府债券(?:合计)?" + NUM + "亿元",
                      "redemption": r"到期偿还本金" + NUM + "亿元",
                      "swap_refi": r"置换存量隐性债务[^,;。]{0,12}?" + NUM + "亿元"}.items():
