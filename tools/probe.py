@@ -1,8 +1,7 @@
-"""Endpoint probe (round 2): run on a GitHub runner; commits raw responses under probe/.
+"""Endpoint probe (round 3): PBoC TSF / money supply / RMB credit table samples.
 Development aid only; nothing here feeds the store."""
 import json
 import re
-import time
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -13,10 +12,8 @@ OUT = Path("probe")
 OUT.mkdir(exist_ok=True)
 for f in OUT.glob("*"):
     f.unlink()
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/124.0 Safari/537.36")
 S = requests.Session()
-S.headers.update({"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9"})
+S.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0 Safari/537.36"})
 summary = {}
 
 
@@ -24,82 +21,34 @@ def get(name, url, ext="html"):
     try:
         r = S.get(url, timeout=60)
         (OUT / f"{name}.{ext}").write_bytes(r.content[:4_000_000])
-        summary[name] = {"status": r.status_code, "bytes": len(r.content), "url": r.url,
-                         "ctype": r.headers.get("Content-Type", "")}
+        summary[name] = {"status": r.status_code, "bytes": len(r.content), "url": r.url}
         return r
     except Exception as e:
         summary[name] = {"error": repr(e)[:300], "url": url}
 
 
-def links(r, pat=None):
-    if r is None or r.status_code != 200:
-        return []
+def rows_with_htm(r):
     s = BeautifulSoup(r.content.decode("utf-8", "replace"), "lxml")
     out = []
-    for a in s.find_all("a"):
-        t = (a.get("title") or a.get_text() or "").strip()
-        h = a.get("href")
-        if h and (pat is None or re.search(pat, t + " " + h)):
-            out.append((t, urljoin(r.url, h)))
+    for tr in s.find_all("tr"):
+        a = tr.find("a", href=re.compile(r"\.htm$"))
+        if a and not tr.find("tr"):
+            out.append((re.sub(r"\s+", " ", tr.get_text(" ", strip=True))[:80], urljoin(r.url, a["href"])))
     return out
 
 
-# PBoC: 2025 and 2016 category pages, first tables and their attachments
-for yr, base in [("2025", "/diaochatongjisi/116219/116319/5570903/"), ("2016", "/diaochatongjisi/116219/116319/3013637/")]:
-    for cat, sub in [("money", {"2025": "5570886", "2016": "3013641"}[yr]), ("credit", {"2025": "5570888", "2016": "3013643"}[yr])]:
-        r = get(f"pboc_{yr}_{cat}", f"https://www.pbc.gov.cn{base}{sub}/index.html")
-        ls = links(r)
-        summary[f"pboc_{yr}_{cat}_links"] = [(t[:40], u) for t, u in ls if "/diaochatongjisi/" in u or u.endswith((".xls", ".xlsx", ".htm", ".pdf"))][:80]
-        tbl = [(t, u) for t, u in ls if re.search(r"社会融资规模|信贷收支|货币供应", t)][:4]
-        for i, (t, u) in enumerate(tbl):
-            rr = get(f"pboc_{yr}_{cat}_tbl{i}", u)
-            att = [(tt, uu) for tt, uu in links(rr) if re.search(r"\.(xls|xlsx|htm|pdf)$", uu)][:6]
-            summary[f"pboc_{yr}_{cat}_tbl{i}_att"] = [t] + att
-            for j, (tt, uu) in enumerate(att[:3]):
-                ext = uu.rsplit(".", 1)[-1]
-                get(f"pboc_{yr}_{cat}_tbl{i}_att{j}", uu, ext)
-
-# NBS: list depth binary search
-lo, hi = 50, 150
-while hi - lo > 1:
-    mid = (lo + hi) // 2
-    try:
-        code = S.get(f"https://www.stats.gov.cn/sj/zxfb/index_{mid}.html", timeout=60).status_code
-    except Exception:
-        code = None
-    if code is None:
-        break
-    lo, hi = (mid, hi) if code == 200 else (lo, mid)
-summary["nbs_zxfb_last_page"] = lo
-r = get("nbs_list_last", f"https://www.stats.gov.cn/sj/zxfb/index_{lo}.html")
-summary["nbs_list_last_titles"] = [t for t, u in links(r) if re.search(r"20\d\d年", t)][:20]
-# one sample of each NBS release type from recent pages
-want = {"retail": "社会消费品零售总额", "ip": "规模以上工业增加值", "property": "房地产市场基本情况|房地产开发投资",
-        "gdp": "国内生产总值初步核算|国民经济", "cpi": "居民消费价格", "ppi": "工业生产者出厂价格", "energy": "能源生产情况"}
-got = {}
-for n in range(0, 8):
-    url = "https://www.stats.gov.cn/sj/zxfb/" + ("" if n == 0 else f"index_{n}.html")
-    for t, u in links(get(f"nbs_list_p{n}", url)):
-        for k, pat in want.items():
-            if k not in got and re.search(pat, t):
-                got[k] = (t, u)
-summary["nbs_samples"] = got
-for k, (t, u) in got.items():
-    get(f"nbs_sample_{k}", u)
-# NBS interpretation of 70-city
-r = get("nbs_sjjd", "https://www.stats.gov.cn/sj/sjjd/")
-jd = [(t, u) for t, u in links(r) if "商品住宅销售价格" in t][:1]
-summary["nbs_sjjd_70"] = jd
-for t, u in jd:
-    get("nbs_sjjd_70city", u)
-# NDRC list depth and MOF older lists
-for n in (40, 60, 80):
-    get(f"ndrc_list_{n}", f"https://www.ndrc.gov.cn/xwdt/xwfb/index_{n}.html")
-for n in (9, 11, 13):
-    get(f"mof_lgb_list_{n}", f"https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_{n}.htm")
-# MOF treasury bond issuance announcements
-r = get("mof_gks_gzgl", "https://gks.mof.gov.cn/ztztz/guozaiguanli/")
-summary["mof_gks_links"] = [(t[:40], u) for t, u in links(r)][:60]
+base = "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/"
+cats = {"tsf_2025": "5570903/5570885/", "tsf_2016": "3013637/3013639/", "tsf_2026": "2026ntjsj/shrzgm/",
+        "money_2025": "5570903/5570886/", "credit_2025": "5570903/5570888/", "credit_2016": "3013637/3013643/"}
+for name, sub in cats.items():
+    r = get(f"pboc_{name}", base + sub + "index.html")
+    if r is None or r.status_code != 200:
+        continue
+    rows = rows_with_htm(r)
+    summary[f"pboc_{name}_rows"] = rows
+    for i, (label, u) in enumerate(rows):
+        if name.startswith("tsf") or re.search(r"货币供应量|^金融机构人民币信贷收支表", label):
+            get(f"pboc_{name}_t{i}", u, "htm")
 
 (OUT / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1))
-print(json.dumps({k: v for k, v in summary.items() if not k.endswith("links")}, ensure_ascii=False)[:3000])
+print(json.dumps(summary, ensure_ascii=False)[:2000])
