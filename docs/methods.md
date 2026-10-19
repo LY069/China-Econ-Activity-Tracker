@@ -34,10 +34,25 @@ known on any date.
 each with a `.meta.json` holding the URL, parameters and first retrieval time. An unchanged
 response creates no new file.
 
-**Indicator resolution.** NBS portal codes are discovered from the portal's own indicator
-tree (`m=getTree`) and matched by Chinese name. A pattern that matches nothing fails loudly
-in `source_status.json`. The resolved code and name are written into lineage, so a silent
-renumbering cannot substitute a different indicator.
+**Source routes actually used** (each established by probing the live sites from a GitHub runner;
+`tools/probe.py`):
+
+| Data | Route | History |
+|---|---|---|
+| NBS activity, prices, property, GDP, 70-city | Monthly release pages `www.stats.gov.cn/sj/zxfb/` (text + embedded tables), parsed by release type | Nov 2021 onward (oldest page in the release archive) |
+| NBS 70-city tier figures (validation target) | Urban-department interpretation releases `www.stats.gov.cn/sj/sjjd/` | Same |
+| TSF flow/stock, money supply, loans by sector & tenor | PBoC statistics tables `pbc.gov.cn/diaochatongjisi/116219/116319/` (HTML version of each table) | 2012 onward |
+| PBoC release text (loans, TSF, M1/M2 y/y) | PBoC news list (`11040-N.html` pagination) | Reconciliation source; M1/M2 published y/y |
+| Local government bonds | MOF monthly release text `yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/` | As far as the list pages go |
+| NDRC approvals | Press-conference transcript attachments (.docx, "发布会实录") | Statements are irregular |
+
+The NBS data portal (`data.stats.gov.cn`) was the planned primary route. It returns HTTP 403 to cloud
+runners even on its landing page, so it is not used. The release pages publish the same official
+figures; the limitation is that their archive starts in November 2021.
+
+**Indicator resolution (portal code, retained):** NBS portal codes would be discovered from the
+portal's own indicator tree and matched by Chinese name. Release parsers likewise extract only
+explicitly stated figures, and record the parser name in lineage.
 
 **Two raw routes.** Some figures exist only in release *text*: PBoC loan splits by sector and
 tenor, MOF local-bond issuance by type, NDRC approval counts, NBS tier housing commentary and
@@ -125,7 +140,15 @@ first fetch.
 - **Fiscal impulse:** Δ12m of the 12-month issuance sum, as a % of GDP (same definition as the
   credit impulse).
 
-### 2.7 Credit (`transform/credit.py`)
+### 2.7 Credit (`transform/credit.py`, `fetch/pboc_tables.py`)
+- **Loans by sector and tenor** are monthly changes in the stocks of the PBoC "金融机构人民币信贷收支表".
+  Household loans split into short and medium/long. Corporate loans split into short, medium/long,
+  bills, leases and advances. Stock identities hold to 0.01 亿元. Flows from stock changes can differ
+  from PBoC-reported new loans (write-offs, reclassification); the gap is a reconciliation check.
+- **TSF:** from the PBoC flow table. Its published components do not sum to the total: the residual
+  is PBoC's unpublished "other" category, logged as WARN. Tables for years before the 2018–19
+  redefinitions have no government-bond / ABS / write-off columns. There TSF ex-government equals
+  the total, flagged `govt_bonds_not_in_definition`.
 - **Credit impulse** = (F12_t − F12_{t−12}) / GDP4Q_t × 100, where F12 is the trailing 12-month
   flow. GDP4Q is trailing 4-quarter nominal GDP, using only quarters published by month t
   (quarter available one month after quarter end).

@@ -268,7 +268,7 @@ def ingest_pboc(pages: int = 40) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=store.COLUMNS)
 
 
-def ingest_mof_lgb(pages: int = 15) -> pd.DataFrame:
+def ingest_mof_lgb(pages: int = 40) -> pd.DataFrame:
     rows = []
     try:
         lst = crawl("MOF", "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/",

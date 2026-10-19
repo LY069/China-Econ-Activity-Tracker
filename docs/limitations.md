@@ -3,6 +3,12 @@
 Stated plainly so they are not mistaken for findings.
 
 ## Data access
+- **NBS history starts in November 2021.** The NBS data portal blocks cloud IPs (403), and the
+  release-page archive begins in November 2021. NBS-based lead/lag tests and nowcasts therefore have
+  roughly 55–60 monthly observations: low power, and wide uncertainty on every estimate. PBoC credit
+  data reaches back to 2012.
+- **The national real estate climate index** (国房景气指数) no longer appears in the monthly property
+  release text and is reported as missing rather than proxied.
 - **Bond-by-bond records (ChinaBond / CELMA) are not ingested yet.** Both sites need
   interactive queries; there is no stable bulk endpoint. Local-bond data comes from MOF's
   monthly release text, which gives aggregates by type. Three consequences:
@@ -19,9 +25,8 @@ Stated plainly so they are not mistaken for findings.
   The project-type ("six networks") classifier is built and unit-tested, but it has no
   project-level input until those sources (or special-bond prospectus project lists) are
   scraped. Its audit precision/recall cannot be reported until then.
-- **PBoC TSF component tables (xls) are not parsed;** components come from release text, which
-  omits ABS and loan write-offs. The TSF component identity is therefore reported as WARN with
-  its residual, not PASS.
+- **TSF components** do not sum to the total by design (PBoC's unpublished "other" category). The
+  identity is reported as WARN with the residual.
 - **Physical proxies:** cement, steel and power come from NBS. Excavator sales (CCMA) and rebar
   apparent demand (Mysteel, paywalled) are not ingested.
 - **Network policy:** the build environment used during development could not reach any
