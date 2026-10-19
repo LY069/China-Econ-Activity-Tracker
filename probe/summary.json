@@ -1,0 +1,170 @@
+{
+ "nbs_query_plain": {
+  "status": 403,
+  "bytes": 293,
+  "url": "https://data.stats.gov.cn/easyquery.htm?m=QueryData&dbcode=hgyd&rowcode=zb&colcode=sj&wds=%5B%5D&dfwds=%5B%7B%22wdcode%22%3A+%22zb%22%2C+%22valuecode%22%3A+%22A0701%22%7D%2C+%7B%22wdcode%22%3A+%22sj%22%2C+%22valuecode%22%3A+%22LAST13%22%7D%5D",
+  "ctype": "text/html; charset=utf-8",
+  "set_cookie": ""
+ },
+ "nbs_landing": {
+  "status": 403,
+  "bytes": 293,
+  "url": "https://data.stats.gov.cn/easyquery.htm?cn=A01",
+  "ctype": "text/html; charset=utf-8",
+  "set_cookie": ""
+ },
+ "nbs_query_warm": {
+  "status": 403,
+  "bytes": 293,
+  "url": "https://data.stats.gov.cn/easyquery.htm?m=QueryData&dbcode=hgyd&rowcode=zb&colcode=sj&wds=%5B%5D&dfwds=%5B%7B%22wdcode%22%3A+%22zb%22%2C+%22valuecode%22%3A+%22A0701%22%7D%2C+%7B%22wdcode%22%3A+%22sj%22%2C+%22valuecode%22%3A+%22LAST13%22%7D%5D&k1=1792374956294&h=1",
+  "ctype": "text/html; charset=utf-8",
+  "set_cookie": ""
+ },
+ "nbs_tree_warm": {
+  "status": 403,
+  "bytes": 293,
+  "url": "https://data.stats.gov.cn/easyquery.htm",
+  "ctype": "text/html; charset=utf-8",
+  "set_cookie": ""
+ },
+ "nbs_new_api": {
+  "status": 404,
+  "bytes": 546,
+  "url": "https://data.stats.gov.cn/dg/website/publicrelease/web/external/getEsDataByCidAndDt",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "nbs_list_50": {
+  "status": 200,
+  "bytes": 73129,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_50.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "nbs_list_150": {
+  "status": 404,
+  "bytes": 555,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_150.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "nbs_list_300": {
+  "status": 404,
+  "bytes": 555,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_300.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "nbs_list_500": {
+  "status": 404,
+  "bytes": 555,
+  "url": "https://www.stats.gov.cn/sj/zxfb/index_500.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "nbs_sjjd": {
+  "status": 200,
+  "bytes": 77054,
+  "url": "https://www.stats.gov.cn/sj/sjjd/",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "nbs_sjjd_100": {
+  "status": 200,
+  "bytes": 85312,
+  "url": "https://www.stats.gov.cn/sj/sjjd/index_100.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "pboc_news_p2": {
+  "status": 200,
+  "bytes": 38237,
+  "url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/11040-2.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "pboc_news_p200": {
+  "status": 200,
+  "bytes": 38670,
+  "url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/11040-200.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "pboc_stats_index": {
+  "status": 200,
+  "bytes": 89073,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/index.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "pboc_stats_2025": {
+  "status": 404,
+  "bytes": 548,
+  "url": "https://www.pbc.gov.cn/diaochatongjisi/116219/116319/2025nian/index.html",
+  "ctype": "text/html",
+  "set_cookie": "SF_cookie_1=90764537; path=/"
+ },
+ "ndrc_docx": {
+  "status": 200,
+  "bytes": 35093,
+  "url": "https://www.ndrc.gov.cn/xwdt/xwfb/202105/W020210518518450177907.docx",
+  "ctype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "set_cookie": ""
+ },
+ "ndrc_list_p20": {
+  "status": 200,
+  "bytes": 11666,
+  "url": "https://www.ndrc.gov.cn/xwdt/xwfb/index_20.html",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "mof_lgb_list_4": {
+  "status": 200,
+  "bytes": 12576,
+  "url": "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_4.htm",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "mof_lgb_list_8": {
+  "status": 200,
+  "bytes": 12374,
+  "url": "https://yss.mof.gov.cn/zhuantilanmu/dfzgl/sjtj/index_8.htm",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "mof_lgb_list_15": {
+  "status": 200,
+  "bytes": 7588,
+  "url": "http://www.mof.gov.cn/404.htm",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "mof_gks_gzfx": {
+  "status": 200,
+  "bytes": 7588,
+  "url": "http://www.mof.gov.cn/404.htm",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "mof_gks": {
+  "status": 200,
+  "bytes": 19918,
+  "url": "https://gks.mof.gov.cn/",
+  "ctype": "text/html",
+  "set_cookie": ""
+ },
+ "celma": {
+  "status": 418,
+  "bytes": 3222,
+  "url": "https://www.celma.org.cn/",
+  "ctype": "text/html; charset=utf-8",
+  "set_cookie": "HWWAFSESID=d5cfa73a5d9827e7d0; path=/, HWWAFSESTIME=1792374984159; path=/"
+ },
+ "chinabond": {
+  "status": 200,
+  "bytes": 665,
+  "url": "https://www.chinabond.com.cn/",
+  "ctype": "text/html",
+  "set_cookie": ""
+ }
+}
