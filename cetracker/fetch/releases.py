@@ -103,9 +103,10 @@ def pboc_financial_statistics(text: str) -> dict:
                     blk[f"{key}_{k}"] = _signed(s2.group(1), _to_yi(s2.group(2), s2.group(3)))
         out["blocks"].append(blk)
     for code, key in [("M2", "m2_yoy"), ("M1", "m1_yoy"), ("M0", "m0_yoy")]:
-        mm = re.search(r"\(" + code + r"\)余额" + CN_NUM + r",同比增长" + NUM + "%", t)
+        # M1 fell y/y through Apr-Dec 2024 ('同比下降5%'): the sign must be read, not assumed
+        mm = re.search(r"\(" + code + r"\)余额" + CN_NUM + r",同比(增长|下降)" + NUM + "%", t)
         if mm:
-            out[key] = float(mm.group(3))
+            out[key] = _sgn(mm.group(3), mm.group(4))
             out[key.replace("_yoy", "_level")] = _to_yi(mm.group(1), mm.group(2))
     return out
 

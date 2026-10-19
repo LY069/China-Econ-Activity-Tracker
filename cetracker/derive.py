@@ -210,8 +210,17 @@ class Deriver:
                     yoy = C.stock_yoy(lvl)
                 self.put(f"money.{code}~yoy_calc", yoy, "stock_yoy[restated base where published]", ins)
         if self.has("money.m1_yoy", "money.m2_yoy"):
-            self.put("money.m1_m2_gap", C.gap(self.get("money.m1_yoy"), self.get("money.m2_yoy")), "difference",
-                     ["money.m1_yoy", "money.m2_yoy"], "")
+            # published y/y where PBoC's release states it; elsewhere (before the 2021 start of the
+            # release archive, months a release was not parsed) y/y from table levels, flagged
+            pub = C.gap(self.get("money.m1_yoy"), self.get("money.m2_yoy"))
+            ins, flags = ["money.m1_yoy", "money.m2_yoy"], {}
+            if self.has("money.m1~yoy_calc", "money.m2~yoy_calc"):
+                calc = C.gap(self.get("money.m1~yoy_calc"), self.get("money.m2~yoy_calc"))
+                fill = calc.index.difference(pub.index)
+                pub = pd.concat([pub, calc[fill]]).sort_index()
+                flags = {d: "from_levels" for d in fill}
+                ins += ["money.m1~yoy_calc", "money.m2~yoy_calc"]
+            self.put("money.m1_m2_gap", pub, "difference[published y/y, else from levels]", ins, flags)
         if self.has("tsf.flow"):
             # months whose TSF definition predates government bonds (PBoC tables before the 2019
             # redefinition) carry no govt-bond column: ex-govt = total there, flagged.

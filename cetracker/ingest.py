@@ -251,7 +251,7 @@ def ingest_pboc(pages: int = 120) -> pd.DataFrame:
                 p["year"], p["month"] = tp.year, tp.month
                 for b in p.get("blocks", []):
                     loan_recs.append((p.get("year"), p.get("month"), "", b, raw, ts, item["url"], pub))
-                if "m1_yoy" in p:
+                if "m1_yoy" in p or "m2_yoy" in p:
                     money.append((p, raw, ts, item["url"], pub))
         lf = ["loans_total", "hh_total", "hh_short", "hh_medlong", "corp_total", "corp_short", "corp_medlong",
               "corp_bills", "nbfi_total"]
@@ -274,6 +274,8 @@ def ingest_pboc(pages: int = 120) -> pd.DataFrame:
         for p, raw, ts, url, pub in money:
             per = _month_end(p["year"], p["month"])
             for k in ("m1_yoy", "m2_yoy"):
+                if k not in p:
+                    continue
                 prov = store.Provenance("PBoC", "primary", url, raw, ts, pub or ts[:10], lineage=f"release_text:{k}")
                 rows.append(store.make_rows(f"money.{k}", pd.Series([p[k]], index=[per]), prov))
         _status("PBoC releases", bool(rows), releases=len(lst), item_errors=item_errors)

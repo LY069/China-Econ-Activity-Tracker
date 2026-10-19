@@ -227,3 +227,37 @@ def test_quarter_retail_and_ppi_forms():
     assert R.nbs_ppi("2026年3月份,全国工业生产者出厂价格同比由上月下降0.9%转为上涨0.5%;环比上涨1.0%")["prices.ppi_yoy"] == 0.5
     assert R.nbs_ppi("2025年7月份,全国工业生产者出厂价格环比下降0.2%,工业生产者购进价格环比下降0.3%。"
                      "工业生产者出厂价格同比下降3.6%,工业生产者购进价格同比下降4.5%")["prices.ppi_yoy"] == -3.6
+
+
+def test_own_lag_skips_structural_january():
+    """A January-less NBS target: own lags step over January, other gaps stay gaps, and the ADL
+    sample keeps ~11 of 12 months instead of collapsing."""
+    from cetracker.analytics import lags
+    rng = np.random.default_rng(5)
+    idx = pd.date_range("2021-11-30", "2026-09-30", freq="ME")
+    x = pd.Series(rng.normal(size=len(idx)), idx)
+    y = pd.Series(0.5 * x.shift(1).fillna(0).values + rng.normal(0, 0.3, len(idx)), idx)
+    y[y.index.month == 1] = np.nan
+    y[pd.Timestamp("2024-06-30")] = np.nan                      # a genuine gap
+    l1 = lags.own_lag(y, 1)
+    assert l1[pd.Timestamp("2025-02-28")] == y[pd.Timestamp("2024-12-31")]
+    assert np.isnan(l1[pd.Timestamp("2024-07-31")])
+    assert lags.own_lag(x, 1).equals(x.shift(1))
+    ad = lags.adl(x, y, max_p=2, max_q=3)
+    assert ad["n"] >= 40 and ad["granger_p"] < 0.01
+
+
+def test_money_negative_growth():
+    p = R.pboc_financial_statistics("6月末,广义货币(M2)余额305.02万亿元,同比增长6.2%。狭义货币(M1)余额66.06万亿元,同比下降5%。")
+    assert p["m2_yoy"] == 6.2 and p["m1_yoy"] == -5.0
+
+
+def test_money_table_partial_year():
+    from cetracker.fetch import pboc_tables as PT
+    hdr = "".join(f"<td>2026.{m:02d}</td>" for m in range(1, 13))
+    html = ("<table><tr><td>项目Item</td>" + hdr + "</tr>"
+            "<tr><td>货币和准货币（M2）</td><td>3471860.39</td><td>3492159.91</td></tr>"
+            "<tr><td>Money&amp;Quasi-money</td></tr>"
+            "<tr><td>货币（M1）</td><td>1179680.52</td><td>1159258.82</td></tr></table>")
+    r = PT.money_supply(html)
+    assert r["M2"].dropna().size == 2 and r["M1"].dropna().iloc[-1] == 1159258.82

@@ -145,7 +145,9 @@ def month_columns_table(html: str) -> tuple[list[pd.Timestamp], list[tuple[str, 
         if r[0].startswith("注"):
             break
         vals = r[1:]
-        if len(vals) == len(periods) and all(NUM.match(v) or v in ("-", "—") for v in vals):
+        # the current year's table has a 12-month header but rows end at the latest month published
+        if 0 < len(vals) <= len(periods) and NUM.match(vals[0]) and all(NUM.match(v) or v in ("-", "—", "") for v in vals):
+            vals = vals + [""] * (len(periods) - len(vals))
             items.append((r[0], [float(v) if NUM.match(v) else None for v in vals]))
     if periods is None:
         raise ValueError("period header not found")

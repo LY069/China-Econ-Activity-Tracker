@@ -195,7 +195,12 @@ first fetch.
 - Computed for total TSF, TSF ex-government bonds (private credit demand) and RMB loans.
 - **Loans by sector and tenor:** PBoC release text gives a year-to-date breakdown, so single
   months are YTD differences.
-- **M1–M2 gap** = M1 y/y − M2 y/y, with the January 2025 M1 break annotated.
+- **M1–M2 gap** = M1 y/y − M2 y/y, with the January 2025 M1 break annotated. It uses published y/y
+  from the PBoC release where the release states it (sign read explicitly: M1 fell y/y from April to
+  December 2024). Elsewhere it uses y/y from the money-supply table levels, flagged `from_levels`;
+  2025 is computed on PBoC's restated 2024 M1 base. This takes the series back to 2013. The
+  current year's table has a 12-month header but rows only up to the latest month, and is parsed
+  as such.
 
 ### 2.8 Housing prices by tier (`transform/housing.py`)
 - **Tiers:** NBS 70-city tiers (4 + 31 + 35, `config/tiers.yaml`).

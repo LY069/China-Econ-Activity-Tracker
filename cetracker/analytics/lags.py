@@ -12,6 +12,10 @@ Pipeline for a pair (x = candidate leading indicator, y = official target):
 2. Prewhitening: AR(p) for x by OLS on lagged values (p by AIC on a common sample, max 12);
    both x and y are filtered with the same AR polynomial; residuals are cross-correlated
    using all months where both are observed (pairwise).
+   Exception: an NBS target that is never observed in January (Jan-Feb combined releases; also
+   February once differenced) takes its own lags on a calendar that skips those months, in the
+   prewhitening filter and the ADL's own-lag terms. Without this every own lag reaching back over a
+   January is missing and the regression sample collapses; x lags stay calendar months.
 3. ADL: y_t = a + sum_{i=1..p} b_i y_{t-i} + sum_{j=1..q} c_j x_{t-j}; (p, q) by BIC on a
    single common sample; HAC (Newey-West) standard errors; sum(c) and its p-value.
 4. Granger: F-test of the x lags in the ADL design (restricted = own lags only, same rows).
@@ -83,8 +87,35 @@ def _lagmat(s: pd.Series, lags) -> pd.DataFrame:
     return pd.DataFrame({f"l{k}": s.shift(k) for k in lags}, index=s.index)
 
 
+def _never_observed_months(s: pd.Series) -> set[int]:
+    """Calendar months a series structurally lacks: never observed although at least two years are.
+    NBS Jan-Feb-combined targets lack January; after differencing they also lack February."""
+    obs = s.dropna()
+    if obs.index.year.nunique() < 3:
+        return set()
+    return set(range(1, 13)) - set(obs.index.month)
+
+
+def own_lag(s: pd.Series, k: int) -> pd.Series:
+    """k-th lag of a series on its own observation calendar. Calendar months the series never has
+    (January for NBS Jan-Feb targets; January and February once differenced) are skipped, so
+    February's (or March's) lag-1 is December and the series' own AR terms and filters do not lose
+    every month within k of a January. Any other missing month stays missing. For a series with
+    no such months this is the ordinary time-based shift."""
+    skip = _never_observed_months(s)
+    if not skip:
+        return s.shift(k)
+    cal = s[~s.index.month.isin(list(skip))]
+    return cal.shift(k).reindex(s.index)
+
+
+def _own_lagmat(s: pd.Series, lags) -> pd.DataFrame:
+    return pd.DataFrame({f"l{k}": own_lag(s, k) for k in lags}, index=s.index)
+
+
 def prewhiten(x: pd.Series, y: pd.Series, maxlag: int = 12) -> tuple[pd.Series, pd.Series, int]:
-    """Filter x and y with the AR polynomial fitted to x (time-based lags, NaNs propagate)."""
+    """Filter x and y with the AR polynomial fitted to x. Lags are each series' own (own_lag): time-based,
+    except that a January-less NBS target steps over January; other NaNs propagate."""
     x = x - x.mean()
     y = y - y.mean()
     maxlag = int(min(maxlag, max(1, x.notna().sum() // 6)))
@@ -106,7 +137,7 @@ def prewhiten(x: pd.Series, y: pd.Series, maxlag: int = 12) -> tuple[pd.Series, 
     def filt(v: pd.Series) -> pd.Series:
         out = v.copy()
         for k in range(1, p + 1):
-            out = out - phi[k - 1] * v.shift(k)
+            out = out - phi[k - 1] * own_lag(v, k)
         return out
 
     return filt(x), filt(y), p
@@ -126,7 +157,7 @@ def ccf(x: pd.Series, y: pd.Series, max_lag: int = 12) -> tuple[pd.Series, pd.Se
 def adl(x: pd.Series, y: pd.Series, max_p: int = 6, max_q: int = 12) -> dict:
     """ADL with (p, q) chosen by BIC on one common sample (rows where all max lags exist)."""
     def frame(mp, mq):
-        Ly = _lagmat(y, range(1, mp + 1)).add_prefix("y_")
+        Ly = _own_lagmat(y, range(1, mp + 1)).add_prefix("y_")
         Lx = _lagmat(x, range(1, mq + 1)).add_prefix("x_")
         return Ly, Lx, pd.concat([y.rename("y"), Ly, Lx], axis=1).dropna()
 
