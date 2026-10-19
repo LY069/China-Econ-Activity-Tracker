@@ -67,7 +67,14 @@ jobs:
           git commit -m "Data refresh $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
           # rebase onto anything pushed while the build ran (code pushes, other runs), then push
           for i in 1 2 3 4; do
-            git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push origin HEAD:"${GITHUB_REF_NAME}" && exit 0
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            # data built by superseded code must not land: the newer push runs its own refresh
+            if ! git diff --quiet "${GITHUB_SHA}" FETCH_HEAD -- cetracker config requirements.txt; then
+              echo "::notice::pipeline code changed on ${GITHUB_REF_NAME} since this run started; discarding this run's data"
+              exit 0
+            fi
+            git rebase -X theirs FETCH_HEAD && git push origin HEAD:"${GITHUB_REF_NAME}" && exit 0
+            git rebase --abort 2>/dev/null || true
             sleep $((i * 5))
           done
           exit 1
