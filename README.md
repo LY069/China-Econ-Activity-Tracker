@@ -23,7 +23,7 @@ cetracker/
   validate/checks.py  identities, reconciliations, y/y reproduction, physical proxies
   build.py            ingest -> derive -> analytics -> validation -> site/data/*.json
 config/               break register, NPC quotas, tiers, CNY dates, six-networks dictionary
-site/index.html       interactive app (auto-refreshes data every 15 min)
+site/index.html       interactive app (re-reads its data files hourly)
 site/tracker_standalone.html   single-file snapshot with data embedded
 docs/                 methods note, validation report (generated), known limitations
 tests/                unit tests + synthetic integration test with planted properties
@@ -40,7 +40,7 @@ python -m cetracker.build --replay  # re-parse everything from the raw archive, 
 cd site && python -m http.server    # open http://localhost:8000
 ```
 
-The `refresh-data` GitHub Action runs the build twice daily (10:20 and 18:20 Beijing time),
+The `refresh-data` GitHub Action runs the build weekly (Mondays 10:20 Beijing time; also on demand from the Actions tab),
 commits new vintages and publishes `site/` to GitHub Pages from `main`.
 
 ## Documents

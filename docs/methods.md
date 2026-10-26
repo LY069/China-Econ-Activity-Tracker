@@ -350,4 +350,4 @@ A FAIL blocks Pages deployment and shows a banner in the app.
 - **PBoC:** credit data around the 10th–15th.
 - **MOF:** the local-bond report, mid-to-late month.
 - **NDRC:** press conferences, irregular, roughly monthly.
-- **Refresh schedule:** the scheduled refresh runs at 10:20 and 18:20 Beijing time.
+- **Refresh schedule:** the scheduled refresh runs weekly, on Mondays at 10:20 Beijing time (02:20 UTC); it can also be started by hand from the Actions tab. A figure released mid-week therefore appears on the site the following Monday.

@@ -106,7 +106,7 @@ h2{font-size:16px;margin:18px 0 8px;font-weight:640}
 
 <script>
 "use strict";
-const REFRESH_MIN = 15;
+const REFRESH_MIN = 60;   // re-read the data files hourly; the data itself refreshes weekly
 const RANGES = [["3y",3],["5y",5],["10y",10],["All",99]];
 const state = {tab: "overview", range: 5, mode: {}, data: null, charts: [], lastLoad: null, llPair: 0, llLag: null};
 try { const s = JSON.parse(localStorage.getItem("cat-state")||"{}"); Object.assign(state, {tab:s.tab||state.tab, range:s.range||state.range}); } catch(e) {}
@@ -591,7 +591,7 @@ function render(){
   const d = state.data || {};
   const meta = d.meta || {};
   document.getElementById("asof").textContent = meta.built_at ? `Data built ${meta.built_at.replace("T"," ").replace("Z"," UTC")} · ${meta.n_series} series` : "No build yet";
-  document.getElementById("refresh-state").textContent = window.__INLINE_DATA__ ? "Snapshot (data embedded)" : state.lastLoad ? `Checked ${state.lastLoad.toLocaleTimeString()} · auto-refresh every ${REFRESH_MIN} min` : "";
+  document.getElementById("refresh-state").textContent = window.__INLINE_DATA__ ? "Snapshot (data embedded)" : state.lastLoad ? `Checked ${state.lastLoad.toLocaleTimeString()} · data updated weekly (Mondays)` : "";
   const banner = document.getElementById("banner"); banner.textContent = "";
   const reach = d.source_status?._reachability || {};
   const down = Object.entries(reach).filter(([k,v])=>!v.ok).map(([k])=>k);

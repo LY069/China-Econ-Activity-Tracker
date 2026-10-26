@@ -4,8 +4,8 @@ name: refresh-data
 # derived data, validation report and app JSON, and publishes site/ to GitHub Pages.
 on:
   schedule:
-    # 02:20 and 10:20 UTC daily (10:20/18:20 Beijing): after NBS (10:00 BJT) and PBoC/MOF releases
-    - cron: "20 2,10 * * *"
+    # weekly, Mondays 02:20 UTC (10:20 Beijing): picks up the previous week's NBS, PBoC and MOF releases
+    - cron: "20 2 * * 1"
   workflow_dispatch: {}
   push:
     branches: [main, "claude/**"]
