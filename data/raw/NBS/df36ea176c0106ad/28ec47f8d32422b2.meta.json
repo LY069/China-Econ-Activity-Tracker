@@ -1,0 +1,11 @@
+{
+ "url": "https://www.stats.gov.cn/sj/zxfb/index_11.html",
+ "request_url": "https://www.stats.gov.cn/sj/zxfb/index_11.html",
+ "params": null,
+ "data": null,
+ "method": "GET",
+ "status": 200,
+ "first_retrieved_at": "2026-10-30T08:42:56Z",
+ "bytes": 73281,
+ "content_type": "text/html"
+}
