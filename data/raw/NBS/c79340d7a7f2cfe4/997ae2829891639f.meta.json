@@ -1,0 +1,11 @@
+{
+ "url": "https://www.stats.gov.cn/sj/sjjd/index_12.html",
+ "request_url": "https://www.stats.gov.cn/sj/sjjd/index_12.html",
+ "params": null,
+ "data": null,
+ "method": "GET",
+ "status": 200,
+ "first_retrieved_at": "2026-11-27T11:16:58Z",
+ "bytes": 77063,
+ "content_type": "text/html"
+}
